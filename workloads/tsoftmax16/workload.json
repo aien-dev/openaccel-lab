@@ -1,0 +1,90 @@
+{
+ "name": "tsoftmax16",
+ "family": "tile-softmax",
+ "summary": "row softmax over TILES tiles of 16 rows x 32 f32 columns, max-subtracted",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); the shape follows the tile kernels of aien-dev/omega-mv PR #869 (unmerged, head 6d08fd9c, seed/kflow/specs/tsoftmax.spec and seed/kflow/sm121/tsoftmax.s2)",
+ "params": {
+  "TILES": 64
+ },
+ "cases": [
+  {},
+  {
+   "TILES": 1
+  },
+  {
+   "TILES": 3
+  }
+ ],
+ "shrink": {
+  "TILES": {
+   "min": 1
+  }
+ },
+ "inputs": [
+  {
+   "name": "x",
+   "dtype": "f32",
+   "shape": [
+    "TILES",
+    16,
+    32
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": 60.0,
+    "hi": 100.0
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "y",
+   "dtype": "f32",
+   "shape": [
+    "TILES",
+    16,
+    32
+   ]
+  }
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "bound",
+   "rtol": "(1+6*u)*(1+5*u)/((1-6*u)*(1-gamma(31)))-1",
+   "atol": 0.0,
+   "why": "Inputs lie in [60,100], so for any x and row max m, m/2 <= x <= m and x-m is exact in f32 (Sterbenz; WolframLanguageEvaluator: 100/60<2 -> True), |x-m| <= 40. Per element y = e/s with e = exp(x-m) within 3 ulp (OpenCL C 3.0 sec 7.4; covers CUDA expf 2 ulp, glibc expf, numpy float32 exp and the Omega binary64 exp rounded to f32), i.e. relative eps_e = 3*2^-23 = 6u; s = sum of 32 positive terms in any order within gamma(31) relative (Higham Thm 3.1, u=2^-24); the divide within 2.5 ulp (OpenCL single-precision x/y), i.e. 5u. Hence |y-ref| <= ((1+6u)(1+5u)/((1-6u)(1-gamma(31)))-1)*|ref|. WolframLanguageEvaluator: u=2^-24; gam[n_]:=n u/(1-n u); rt=(1+3*2^-23)(1+5/2*2^-23)/((1-3*2^-23)(1-gam[31]))-1; N[{gam[31],rt,rt/2^-23},12] -> {1.84774740220e-6, 2.86103211881e-6, 24.0000769201}. This re-derives PR #869's softmax bound (2.29976200922e-6, one warp butterfly of 5 additions and ex2.approx/rcp.approx) for 31 additions in any order and per-backend exp and divide accuracy. Outputs stay normal: WolframLanguageEvaluator: N[Exp[-40]/32 > 2^-126] -> True. Without max subtraction exp(x) overflows for x > 88.72 (WolframLanguageEvaluator: N[Log[(2-2^-23)*2^127],12] -> 88.7228390521), giving inf/NaN; one dropped column changes the row sum by e^(x-m)/s, above the bound in some row."
+  }
+ },
+ "timing": {
+  "warmup": 1,
+  "repeats": 5
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "tsoftmax16",
+     "global": [
+      "TILES*16"
+     ],
+     "local": null,
+     "args": [
+      "x",
+      "y",
+      "TILES"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}

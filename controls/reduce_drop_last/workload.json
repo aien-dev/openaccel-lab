@@ -1,0 +1,52 @@
+{
+ "name": "reduce_drop_last",
+ "family": "reduction",
+ "summary": "CONTROL for reduce_sum: every entrant sums only x[0..n-2], skipping the last element; judged by the reduce_sum reference and bound, it must fail",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); deliberately wrong copy of workloads/reduce_sum",
+ "expect": "fail",
+ "reference_from": "reduce_sum",
+ "params": {
+  "n": 2003
+ },
+ "derived": {
+  "nb": "(n + 255) // 256"
+ },
+ "cases": [
+  {},
+  {"n": 1},
+  {"n": 257}
+ ],
+ "shrink": {
+  "n": {"min": 1}
+ },
+ "inputs": [
+  {"name": "x", "dtype": "f32", "shape": ["n"], "gen": {"kind": "uniform", "lo": 0.5, "hi": 1.0}}
+ ],
+ "outputs": [
+  {"name": "y", "dtype": "f32", "shape": [1]}
+ ],
+ "scratch": [
+  {"name": "part", "dtype": "f32", "shape": ["nb"]}
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "bound",
+   "rtol": "gamma(n)",
+   "atol": 0,
+   "why": "reduce_sum's contract. Inputs lie in [0.5, 1), so the bound gamma(n)*sum|x_i| < gamma(n)*n while the dropped element is >= 0.5 and the summation error is far below it: WolframLanguageEvaluator: u=2^-24; g[n_]:=n u/(1-n u); N[g[2003]*2003,10] -> 0.2391629245; N[g[257]*257,10] -> 0.003936887490; n = 1 drops the only element (y = 0 against x[0] >= 0.5). At reduce_sum's n = 100003 a single element of [-1, 1] sits under the bound (N[g[100003]*100003/2,10] -> 299.8282749), so the control uses n = 2003."
+  }
+ },
+ "timing": {"warmup": 1, "repeats": 5},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {"kernel": "rsum_part", "global": ["nb * 256"], "local": [256], "args": ["x", "part", "n", "local:f32:256"]},
+    {"kernel": "rsum_fin", "global": [256], "local": [256], "args": ["part", "y", "nb", "local:f32:256"]}
+   ]
+  },
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

@@ -1,0 +1,28 @@
+{
+ "name": "saxpy",
+ "family": "memory-bound",
+ "summary": "y[i] = alpha * x[i] + y_in[i] over n f32 elements; alpha is a one-element f32 input",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); BLAS level-1 SAXPY semantics",
+ "params": {"n": 100003},
+ "cases": [{}, {"n": 1}, {"n": 4099}],
+ "shrink": {"n": {"min": 1}},
+ "inputs": [
+  {"name": "alpha", "dtype": "f32", "shape": [1], "gen": {"kind": "uniform", "lo": -2.0, "hi": 2.0}},
+  {"name": "x", "dtype": "f32", "shape": ["n"], "gen": {"kind": "uniform", "lo": -4.0, "hi": 4.0}},
+  {"name": "y_in", "dtype": "f32", "shape": ["n"], "gen": {"kind": "normal4", "std": 2.0}}
+ ],
+ "outputs": [{"name": "y", "dtype": "f32", "shape": ["n"]}],
+ "tolerance": {
+  "y": {"kind": "bound", "rtol": "gamma(2)", "atol": 0,
+        "why": "alpha*x+y is a length-2 dot product (alpha,1).(x,y): unfused it is two roundings, fused one, so |err| <= gamma(2)*(|alpha x|+|y|) (Higham Thm 3.1); reference.py passes |alpha x|+|y| as scale. WolframLanguageEvaluator: g[n_]:=n 2^-24/(1-n 2^-24); N[g[2],6] -> 1.19209*10^-7"}
+ },
+ "timing": {"warmup": 2, "repeats": 10},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {"src": "kernel.cl", "launches": [
+   {"kernel": "saxpy", "global": ["n"], "local": null, "args": ["alpha", "x", "y_in", "y", "n"]}
+  ]},
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

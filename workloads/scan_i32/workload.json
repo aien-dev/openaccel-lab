@@ -1,0 +1,50 @@
+{
+ "name": "scan_i32",
+ "family": "scan",
+ "summary": "y[i] = x[0] + ... + x[i] (inclusive prefix sum) over n i32 elements; OpenCL/CUDA scan 256-wide blocks in local memory, scan the block sums in one block, then add each block's offset",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "n": 100003
+ },
+ "derived": {
+  "nb": "(n + 255) // 256"
+ },
+ "cases": [
+  {},
+  {"n": 1},
+  {"n": 257}
+ ],
+ "shrink": {
+  "n": {"min": 1}
+ },
+ "inputs": [
+  {"name": "x", "dtype": "i32", "shape": ["n"], "gen": {"kind": "int", "lo": -9, "hi": 9}}
+ ],
+ "outputs": [
+  {"name": "y", "dtype": "i32", "shape": ["n"]}
+ ],
+ "scratch": [
+  {"name": "bsum", "dtype": "i32", "shape": ["nb"]}
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "int",
+   "atol": 0,
+   "why": "integer additions are exact: |x_i| <= 9, so every prefix is at most 9*n in magnitude, far inside i32 for the cases run"
+  }
+ },
+ "timing": {"warmup": 1, "repeats": 5},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {"kernel": "scan_blk", "global": ["nb * 256"], "local": [256], "args": ["x", "y", "bsum", "n", "local:i32:256"]},
+    {"kernel": "scan_sums", "global": [256], "local": [256], "args": ["bsum", "nb", "local:i32:256"]},
+    {"kernel": "scan_add", "global": ["nb * 256"], "local": [256], "args": ["y", "bsum", "n"]}
+   ]
+  },
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

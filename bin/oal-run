@@ -1,0 +1,27 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# oal-run BACKEND WORKLOAD < case.bin > outputs.bin
+# Build and run one entrant on one case. stdout: the entrant's output tensors; stderr: its log and a
+# final JSON status line. Exit 0 ran, 2 compile failure, 3 runtime failure or timeout, 4 NOT_RUN,
+# 5 NO_SOURCE, 6 COMPILED (built, not run).
+# INTERIM host glue (Python). Successor: oal-run in seeded Omega.
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import json
+from oal import case, manifest, run
+
+if len(sys.argv) != 3 or sys.argv[1] not in run.BACKENDS:
+    sys.stderr.write("usage: oal-run {%s} WORKLOAD < case > outputs\n" % ",".join(run.BACKENDS))
+    sys.exit(2)
+backend, name = sys.argv[1], sys.argv[2]
+m = manifest.load(name)
+blob = sys.stdin.buffer.read()
+pvals = case.unpack(blob)[0]
+params = dict(zip(manifest.params_of(m).keys(), pvals))
+r = run.execute(backend, m, params, blob, int(os.environ.get("OAL_TIMEOUT", "600")))
+if r.get("outputs") is not None:
+    sys.stdout.buffer.write(r.pop("outputs"))
+sys.stderr.write(json.dumps(r) + "\n")
+sys.exit({"RAN": 0, "COMPILE_FAIL": 2, "RUNTIME_FAIL": 3, "TIMEOUT": 3, "NOT_RUN": 4, "NO_SOURCE": 5,
+          "COMPILED": 6}[r["status"]])

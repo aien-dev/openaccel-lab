@@ -1,0 +1,31 @@
+{
+  "schema_version": "1.0.0",
+  "name": "openaccel-lab",
+  "layer": "tooling",
+  "path": "aien-dev/openaccel-lab",
+  "purpose": "Vendor-neutral, execution-verified conformance and performance lab for accelerator kernels: one float64 reference and written tolerance per workload, identical seeded inputs for every entrant (OpenCL C, Triton, HIP, CUDA, Omega), wrong-kernel controls that must be flagged, distribution-only timings, and a GitHub Pages board. CPU evidence on CI; GPU rows only as labelled receipts.",
+  "creator": "AIEN (lane OpenAccelLab)",
+  "created_at": "2026-10-27T02:30:00Z",
+  "lineage": {
+    "parent": [
+      "aien-dev/omega-gpu-bench@be6e65acafa9f75e705a308100bc5ddec8bfaa66",
+      "aien-dev/omega-kernel-template@23a04c9fbe8a2e47ff86deaa1c537960f8986158",
+      "aien-dev/omega-mv@369dbc96daa1684db2d7c2c7085bbf16b3fd77ee"
+    ],
+    "generation": 1
+  },
+  "invariants": [
+    "A control that passes on any backend fails the gate.",
+    "Every entrant of a workload receives byte-identical input (case_sha256 must agree across runners).",
+    "Timings are reported as distributions with sample counts, never means; CPU timings are labelled not-GPU.",
+    "NOT_RUN, NO_SOURCE and COMPILED are never counted as PASS.",
+    "No NVIDIA binary, SASS or generated machine artifact is inspected or translated; entrants are source only."
+  ],
+  "whispers": [
+    {
+      "agent": "OpenAccelLab",
+      "timestamp": "2026-10-27T02:30:00Z",
+      "message": "Created from the deep-research report's OpenAccel Lab recommendation; Omega is one entrant, not the referee."
+    }
+  ]
+}

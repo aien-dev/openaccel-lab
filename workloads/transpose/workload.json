@@ -1,0 +1,26 @@
+{
+ "name": "transpose",
+ "family": "memory-bound",
+ "summary": "b[j][i] = a[i][j]: f32 R x C row-major in, C x R row-major out",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); 16x16 tiled transpose through shared/local memory",
+ "params": {"R": 96, "C": 80},
+ "cases": [{}, {"R": 33, "C": 7}, {"R": 1, "C": 1}],
+ "shrink": {"R": {"min": 1}, "C": {"min": 1}},
+ "inputs": [
+  {"name": "a", "dtype": "f32", "shape": ["R", "C"], "gen": {"kind": "uniform", "lo": -4.0, "hi": 4.0}}
+ ],
+ "outputs": [{"name": "b", "dtype": "f32", "shape": ["C", "R"]}],
+ "tolerance": {
+  "b": {"kind": "exact", "why": "pure copy, no arithmetic"}
+ },
+ "timing": {"warmup": 2, "repeats": 10},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {"src": "kernel.cl", "launches": [
+   {"kernel": "transpose", "global": ["(C + 15) // 16 * 16", "(R + 15) // 16 * 16"], "local": [16, 16],
+    "args": ["a", "b", "R", "C"]}
+  ]},
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

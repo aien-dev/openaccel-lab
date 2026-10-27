@@ -1,0 +1,26 @@
+note CONTROL (deliberately wrong): stores the prefix before adding x[i], i.e. the EXCLUSIVE scan.
+global kn ulong 1
+fn kern to void
+s = int 0
+for i ulong get kn 0
+put io i s
+s = add s get ia i
+end
+end
+fn main to int
+oal_begin
+put kn 0 ulong oal_p 0
+a = oal_ia 0
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_sio 0 get kn 0
+oal_end
+ret 0
+end

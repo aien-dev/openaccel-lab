@@ -1,0 +1,30 @@
+global kn ulong 1
+fn kern to void
+m = get fa 0
+k = ulong 0
+for i ulong get kn 0
+v = get fa i
+if gt v m
+m = v
+k = i
+end
+end
+put io 0 int k
+end
+fn main to int
+oal_begin
+put kn 0 ulong oal_p 0
+a = oal_fa 0
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_sio 0 1
+oal_end
+ret 0
+end

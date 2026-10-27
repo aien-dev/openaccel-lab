@@ -1,0 +1,99 @@
+{
+ "name": "softmax_unstable",
+ "family": "row-reduction-transcendental",
+ "summary": "CONTROL: row softmax with the max subtraction omitted in every entrant (y = exp(x) / sum(exp(x))); inputs in [80,100] overflow f32 exp (e^100 = 2.69e43 > f32 max 3.40e38), so every entrant must fail against the stable softmax reference",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "R": 24,
+  "D": 200
+ },
+ "cases": [
+  {},
+  {
+   "R": 4,
+   "D": 7
+  },
+  {
+   "R": 5,
+   "D": 1023
+  }
+ ],
+ "shrink": {
+  "R": {
+   "min": 1
+  },
+  "D": {
+   "min": 1
+  }
+ },
+ "inputs": [
+  {
+   "name": "x",
+   "dtype": "f32",
+   "shape": [
+    "R",
+    "D"
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": 80.0,
+    "hi": 100.0
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "y",
+   "dtype": "f32",
+   "shape": [
+    "R",
+    "D"
+   ]
+  }
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "bound",
+   "rtol": 1.0,
+   "atol": 0.0,
+   "why": "same contract as workloads/softmax (reference_from softmax). Expected to fail: without the max subtraction exp overflows f32 for x > ln(f32 max) (WolframLanguageEvaluator: Log[(2-2^-23) 2^127] -> 88.7228; Exp[100] -> 2.6881e43 > (2-2^-23)2^127 = 3.4028e38), so row sums are +inf and the outputs NaN or 0."
+  }
+ },
+ "timing": {
+  "warmup": 1,
+  "repeats": 5
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "softmax",
+     "global": [
+      "R*64"
+     ],
+     "local": [
+      "64"
+     ],
+     "args": [
+      "x",
+      "y",
+      "D",
+      "local:f32:64"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ },
+ "expect": "fail",
+ "reference_from": "softmax"
+}

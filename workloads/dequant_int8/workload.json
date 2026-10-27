@@ -1,0 +1,107 @@
+{
+ "name": "dequant_int8",
+ "family": "quantization",
+ "summary": "per-row int8 dequantization: y[r][c] = q[r][c] * s[r], q i8 in -127..127, s f32 per row",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "R": 64,
+  "C": 256
+ },
+ "cases": [
+  {},
+  {
+   "R": 1,
+   "C": 1
+  },
+  {
+   "R": 5,
+   "C": 77
+  }
+ ],
+ "shrink": {
+  "R": {
+   "min": 1
+  },
+  "C": {
+   "min": 1
+  }
+ },
+ "inputs": [
+  {
+   "name": "q",
+   "dtype": "i8",
+   "shape": [
+    "R",
+    "C"
+   ],
+   "gen": {
+    "kind": "int",
+    "lo": -127,
+    "hi": 127
+   }
+  },
+  {
+   "name": "s",
+   "dtype": "f32",
+   "shape": [
+    "R"
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": 0.001,
+    "hi": 0.05
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "y",
+   "dtype": "f32",
+   "shape": [
+    "R",
+    "C"
+   ]
+  }
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "exact",
+   "why": "q converts to f32 exactly (|q| <= 127 < 2^24), then one correctly rounded f32 multiply per element"
+  }
+ },
+ "timing": {
+  "warmup": 2,
+  "repeats": 10
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "dequant_int8",
+     "global": [
+      "R",
+      "C"
+     ],
+     "local": null,
+     "args": [
+      "q",
+      "s",
+      "y",
+      "R",
+      "C"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}

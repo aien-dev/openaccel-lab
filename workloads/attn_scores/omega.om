@@ -1,0 +1,43 @@
+global kt ulong 1
+global kd ulong 1
+fn dotqk qi ulong kj ulong d ulong to f32
+acc = 0.0f32
+for c ulong d
+x = get fa add qi c
+acc = add acc mul x get fb add kj c
+end
+ret acc
+end
+fn kern to void
+t = get kt 0
+d = get kd 0
+for i ulong t
+for j ulong t
+o = add mul i t j
+if gt j i
+put fo o -1.0e30f32
+else
+put fo o mul dotqk mul i d mul j d d 0.125f32
+end
+end
+end
+end
+fn main to int
+oal_begin
+put kt 0 ulong oal_p 0
+put kd 0 ulong oal_p 1
+a = oal_fa 0
+b = oal_fb 1
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 mul get kt 0 get kt 0
+oal_end
+ret 0
+end

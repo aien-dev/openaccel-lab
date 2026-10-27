@@ -1,0 +1,69 @@
+note attention: per row i, scores into sr, row max, e_j = exp(s_j - max) rounded to f32, o = (sum e_j v_j) / sum e_j
+global kt ulong 1
+global kd ulong 1
+global sr f32 65536
+fn dotqk qi ulong kj ulong d ulong to f32
+acc = 0.0f32
+for c ulong d
+x = get fa add qi c
+acc = add acc mul x get fb add kj c
+end
+ret acc
+end
+fn rowexp n ulong m f32 to f32
+z = 0.0f32
+for j ulong n
+e = f32 oal_expf f64 sub get sr j m
+put sr j e
+z = add z e
+end
+ret z
+end
+fn rowpv i ulong n ulong d ulong z f32 to void
+for c ulong d
+acc = 0.0f32
+for j ulong n
+x = get sr j
+acc = add acc mul x get fc add mul j d c
+end
+put fo add mul i d c div acc z
+end
+end
+fn kern to void
+t = get kt 0
+d = get kd 0
+for i ulong t
+n = add i 1
+m = -1.0e30f32
+for j ulong n
+s = mul dotqk mul i d mul j d d 0.125f32
+put sr j s
+m = fmax m s
+end
+z = rowexp n m
+rowpv i n d z
+end
+end
+fn main to int
+oal_begin
+put kt 0 ulong oal_p 0
+put kd 0 ulong oal_p 1
+if gt get kt 0 65536
+trap 9
+end
+a = oal_fa 0
+b = oal_fb 1
+c = oal_fc 2
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 mul get kt 0 get kd 0
+oal_end
+ret 0
+end

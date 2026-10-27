@@ -1,0 +1,109 @@
+{
+ "name": "attn_scores",
+ "family": "attention",
+ "summary": "causal attention scores S[i][j] = 0.125 * sum_c Q[i][c] K[j][c] for j <= i, S[i][j] = -1e30f for j > i; Q, K are T x Dh with Dh = 64 so 1/sqrt(Dh) = 0.125 is exact",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "T": 48,
+  "Dh": 64
+ },
+ "cases": [
+  {},
+  {
+   "T": 1
+  },
+  {
+   "T": 17
+  }
+ ],
+ "shrink": {
+  "T": {
+   "min": 1
+  },
+  "Dh": {
+   "min": 64,
+   "multiple_of": 64
+  }
+ },
+ "inputs": [
+  {
+   "name": "q",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "Dh"
+   ],
+   "gen": {
+    "kind": "normal4",
+    "mean": 0.0,
+    "std": 1.0
+   }
+  },
+  {
+   "name": "k",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "Dh"
+   ],
+   "gen": {
+    "kind": "normal4",
+    "mean": 0.0,
+    "std": 1.0
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "s",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "T"
+   ]
+  }
+ ],
+ "tolerance": {
+  "s": {
+   "kind": "bound",
+   "rtol": "gamma(Dh)",
+   "atol": 0,
+   "why": "unmasked entry: a length-Dh dot product in any order, with or without FMA, is within gamma(Dh) * sum_c |q_c k_c| of the exact value (Higham Thm 3.1/3.5); the scale 0.125 = 2^-3 is exact both before and after the sum, so reference.py passes 0.125 * sum_c |q_c k_c| as the scale. WolframLanguageEvaluator: u=2^-24; g[n_]:=n u/(1-n u); N[g[64],10] -> 3.814711818*10^-6. Masked entry (j > i): scale 0 and atol 0, so it must equal float32(-1e30) exactly. A dropped term moves an entry by |q_c k_c|, far above 3.8e-6 of the row sum."
+  }
+ },
+ "timing": {
+  "warmup": 2,
+  "repeats": 10
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "attn_scores",
+     "global": [
+      "T",
+      "T"
+     ],
+     "local": null,
+     "args": [
+      "q",
+      "k",
+      "s",
+      "T",
+      "Dh"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}

@@ -1,0 +1,96 @@
+{
+ "name": "vecadd",
+ "family": "memory-bound",
+ "summary": "y[i] = a[i] + b[i] over n f32 elements",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); the GPU form matches aien-dev/omega-gpu-bench vecadd",
+ "params": {
+  "n": 100003
+ },
+ "cases": [
+  {},
+  {
+   "n": 1
+  },
+  {
+   "n": 4096
+  }
+ ],
+ "shrink": {
+  "n": {
+   "min": 1
+  }
+ },
+ "inputs": [
+  {
+   "name": "a",
+   "dtype": "f32",
+   "shape": [
+    "n"
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": -4.0,
+    "hi": 4.0
+   }
+  },
+  {
+   "name": "b",
+   "dtype": "f32",
+   "shape": [
+    "n"
+   ],
+   "gen": {
+    "kind": "normal4",
+    "std": 2.0
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "y",
+   "dtype": "f32",
+   "shape": [
+    "n"
+   ]
+  }
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "exact",
+   "why": "one correctly rounded f32 add per element"
+  }
+ },
+ "timing": {
+  "warmup": 2,
+  "repeats": 10
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "vecadd",
+     "global": [
+      "n"
+     ],
+     "local": null,
+     "args": [
+      "a",
+      "b",
+      "y",
+      "n"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}

@@ -1,0 +1,32 @@
+# Pinned toolchain for OpenAccel Lab. Sourced by tools/fetch.sh and the CI workflow.
+# Every file comes from GitHub at an exact commit or release and is refused unless its sha256
+# (or, for git checkouts, its commit id) matches. Change a pin only together with a passing run.
+
+# Parent repositories this lab grows out of (read-only; nothing is copied from them except the
+# imported receipts under receipts/imported/, which carry their own sha256 list).
+OMEGA_GPU_BENCH_REPO=aien-dev/omega-gpu-bench
+OMEGA_GPU_BENCH_COMMIT=be6e65acafa9f75e705a308100bc5ddec8bfaa66
+OMEGA_KERNEL_TEMPLATE_REPO=aien-dev/omega-kernel-template
+OMEGA_KERNEL_TEMPLATE_COMMIT=23a04c9fbe8a2e47ff86deaa1c537960f8986158
+
+# Omega compiler (the Omega entrant), from aien-dev/omega-mv.
+OMEGA_MV_REPO=aien-dev/omega-mv
+OMEGA_MV_COMMIT=369dbc96daa1684db2d7c2c7085bbf16b3fd77ee
+OMC_SHA256=2c82480596bbdc50cda9626866209ef662d5834f278f839ff4ce0250c495029f
+
+# PoCL 7.2 CPU OpenCL runtime for AArch64 (the OpenCL entrant on the arm64 runner): the release
+# asset aien-dev/omega-kernel-template built and self-tested on ubuntu-24.04-arm.
+POCL_REPO=aien-dev/omega-kernel-template
+POCL_TAG=pocl-7.2-888c9774-noble-arm64.1
+POCL_ASSET=pocl-7.2-888c9774-noble-arm64.tar.gz
+POCL_SHA256=68892ec0b43b2edbbee27ff3b799826af92a8cc061e0e5a111eca83e78166fbd
+POCL_LIB=lib/libpocl.so.2.16.0
+
+# HIP-CPU (the HIP entrant runs HIP source on the host CPU). MIT; archived upstream.
+HIPCPU_REPO=ROCm/HIP-CPU
+HIPCPU_COMMIT=e112c935057434897bb12d9ab3910380a8bd5f58
+
+# hipify-perl (CUDA source -> HIP source). Apache-2.0 WITH LLVM-exception.
+HIPIFY_REPO=ROCm/HIPIFY
+HIPIFY_COMMIT=7d531fc2620f66990aca1971b6cdd96c74f83d75
+HIPIFY_PERL_SHA256=3bd7551403e5e861bbca020690e0dfdad5aff1c7ed0558203abd7fc629128790

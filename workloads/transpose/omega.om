@@ -1,0 +1,29 @@
+note transpose: fo[j*R + i] = fa[i*C + j] for an R x C row-major fa
+global dm ulong 2
+fn kern to void
+r = get dm 0
+c = get dm 1
+for i ulong r
+for j ulong c
+put fo add mul j r i get fa add mul i c j
+end
+end
+end
+fn main to int
+oal_begin
+put dm 0 ulong oal_p 0
+put dm 1 ulong oal_p 1
+a = oal_fa 0
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 mul get dm 0 get dm 1
+oal_end
+ret 0
+end

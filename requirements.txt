@@ -1,0 +1,5 @@
+# Python packages for the INTERIM host glue and the OpenCL/Triton entrants. See DEPENDENCIES.md.
+numpy==2.5.4
+pyopencl==2026.1.4
+triton==3.8.0
+torch==2.14.1

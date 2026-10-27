@@ -1,0 +1,97 @@
+{
+ "name": "softmax",
+ "family": "row-reduction-transcendental",
+ "summary": "row softmax of x[R][D]: y = exp(x - max) / sum(exp(x - max))",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "R": 24,
+  "D": 200
+ },
+ "cases": [
+  {},
+  {
+   "R": 3,
+   "D": 1
+  },
+  {
+   "R": 5,
+   "D": 1023
+  }
+ ],
+ "shrink": {
+  "R": {
+   "min": 1
+  },
+  "D": {
+   "min": 1
+  }
+ },
+ "inputs": [
+  {
+   "name": "x",
+   "dtype": "f32",
+   "shape": [
+    "R",
+    "D"
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": -30.0,
+    "hi": 30.0
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "y",
+   "dtype": "f32",
+   "shape": [
+    "R",
+    "D"
+   ]
+  }
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "bound",
+   "rtol": 1.0,
+   "atol": 0.0,
+   "why": "reference.py returns an absolute per-element bound y_j R_j as the scale (rtol 1), in float64 from the exact inputs. a_k = x_k - m (m the row max, exact). The f32 subtraction rounds once: d_k = a_k(1+delta), so exp(d_k) = exp(a_k) exp(a_k delta) with |exp(a_k delta) - 1| <= exp(u|a_k|) - 1 (|a_k| <= 60 here: WolframLanguageEvaluator: (Exp[60 u]-1)/u, u=2^-24 -> 60.0001). exp budget 3 ulp (OpenCL C 3.0 s7.4; CUDA expf 2 ulp; Omega rounds a binary64 exp once) = 6u relative (WolframLanguageEvaluator: 3*2^-23/2^-24 -> 6), so e_k^ = e_k(1+eta_k), |eta_k| <= eps_k = (1+6u)exp(u|a_k|) - 1, E = max_k eps_k. The sum of D positive terms in any order: S^ = S(1+theta), |theta| <= (1+E)(1+gamma(D-1)) - 1. The normalisation (divide, or reciprocal then multiply) costs gamma(2). R_j = max((1+eps_j)(1+gamma(2)) / ((1-E)(1-gamma(D-1))) - 1, 1 - (1-eps_j)(1-gamma(2)) / ((1+E)(1+gamma(D-1)))). Inputs are uniform in [-30,30], so every e_k >= exp(-60) is a normal f32 (WolframLanguageEvaluator: Exp[-60] -> 8.7565e-27 > 2^-126 = 1.1755e-38). A kernel without max subtraction is wrong on the softmax_unstable control (inputs in [80,100])."
+  }
+ },
+ "timing": {
+  "warmup": 1,
+  "repeats": 5
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "softmax",
+     "global": [
+      "R*64"
+     ],
+     "local": [
+      "64"
+     ],
+     "args": [
+      "x",
+      "y",
+      "D",
+      "local:f32:64"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}

@@ -1,0 +1,37 @@
+global tn ulong 1
+fn kern to void
+nr = mul get tn 0 16
+for r ulong nr
+b = mul r 32
+m = get fa b
+for j ulong 32
+m = fmax m get fa add b j
+end
+s = 0.0f32
+for j ulong 32
+e = f32 oal_expf f64 sub get fa add b j m
+put fo add b j e
+s = add s e
+end
+for j ulong 32
+put fo add b j div get fo add b j s
+end
+end
+end
+fn main to int
+oal_begin
+put tn 0 ulong oal_p 0
+nx = oal_fa 0
+w = oal_warm
+for r ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge r w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 mul get tn 0 512
+oal_end
+ret 0
+end

@@ -1,0 +1,109 @@
+{
+ "name": "tmatmul16",
+ "family": "tile-matmul",
+ "summary": "C[t] = A[t] B[t] for TILES independent 16x16x16 tiles, f16-grid f32 inputs, f32 accumulate",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); the shape follows the tile kernels of aien-dev/omega-mv PR #869 (unmerged, head 6d08fd9c, seed/kflow/specs/tmatmul16.spec and seed/kflow/sm121/tmatmul16.s2)",
+ "params": {
+  "TILES": 64
+ },
+ "cases": [
+  {},
+  {
+   "TILES": 1
+  },
+  {
+   "TILES": 3
+  }
+ ],
+ "shrink": {
+  "TILES": {
+   "min": 1
+  }
+ },
+ "inputs": [
+  {
+   "name": "a",
+   "dtype": "f32",
+   "shape": [
+    "TILES",
+    16,
+    16
+   ],
+   "gen": {
+    "kind": "grid",
+    "klo": -1024,
+    "khi": 1024,
+    "shift": 10
+   }
+  },
+  {
+   "name": "b",
+   "dtype": "f32",
+   "shape": [
+    "TILES",
+    16,
+    16
+   ],
+   "gen": {
+    "kind": "grid",
+    "klo": -1024,
+    "khi": 1024,
+    "shift": 10
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "c",
+   "dtype": "f32",
+   "shape": [
+    "TILES",
+    16,
+    16
+   ]
+  }
+ ],
+ "tolerance": {
+  "c": {
+   "kind": "bound",
+   "rtol": "gamma(15)",
+   "atol": 0.0,
+   "why": "Inputs are k*2^-10 with |k|<=1024, so every value is exact in f16 and in f32, every product a*b is an integer multiple of 2^-20 with |a*b|<=1 and is exact in f32, and with or without FMA a length-16 dot product starting from 0 takes at most 15 rounded additions (the first product enters exactly). Higham Thm 3.1/3.5 for any summation order with round-to-nearest (u=2^-24): |d-ref| <= gamma(15)*sum_k |a_ik b_kj|; reference.py passes that sum as scale. WolframLanguageEvaluator: u=2^-24; gam[n_]:=n u/(1-n u); N[gam[15],12] -> 8.94070470992e-7 (PR #869 quotes gamma_15 = 1.78814254071e-6 with u=2^-23 to allow any rounding mode; every entrant here rounds to nearest, so u=2^-24). On this grid the bound is not the binding fact: every partial sum is an integer multiple of 2^-20 of magnitude <= 16*2^20 = 2^24 (WolframLanguageEvaluator: 16*1024*1024==2^24 -> True), hence exact in f32, so a correct entrant's observed error is 0; the bound is what the contract guarantees for general f16 tiles. One dropped k term changes an element by |a_ik b_kj| up to 1, far above the bound, so gemm_offbyone fails."
+  }
+ },
+ "timing": {
+  "warmup": 1,
+  "repeats": 5
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "tmatmul16",
+     "global": [
+      "TILES*256"
+     ],
+     "local": [
+      256
+     ],
+     "args": [
+      "a",
+      "b",
+      "c",
+      "TILES"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}
