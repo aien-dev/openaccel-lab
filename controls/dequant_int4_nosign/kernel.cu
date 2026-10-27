@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: Apache-2.0
+// CONTROL dequant_int4_nosign: the nibble is not sign-extended.
 #include <cuda_runtime.h>
 
 __global__ void dequant_int4(const unsigned char *w, const float *s, float *y, int R, int C, int G, int NB)
@@ -10,7 +11,6 @@ __global__ void dequant_int4(const unsigned char *w, const float *s, float *y, i
     int c = (int)(i % C);
     int b = w[r * NB + c / 2];
     int nib = (c & 1) ? (b >> 4) : (b & 15);
-    nib = nib >= 8 ? nib - 16 : nib;
     y[i] = (float)nib * s[r * G + c / 32];
 }
 

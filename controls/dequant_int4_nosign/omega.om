@@ -1,4 +1,4 @@
-note dequant_int4: oal_qa gives bytes as -128..127, so add 256 for the u8 value, then take the nibble
+note CONTROL dequant_int4_nosign: as workloads/dequant_int4 but the nibble is not sign-extended
 global kr ulong 1
 global kc ulong 1
 global kg ulong 1
@@ -10,9 +10,6 @@ end
 n = and v 15
 if eq hi 1
 n = shr v 4
-end
-if ge n 8
-n = sub n 16
 end
 ret f32 n
 end

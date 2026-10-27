@@ -1,7 +1,9 @@
 {
- "name": "dequant_int4",
+ "name": "dequant_int4_nosign",
+ "expect": "fail",
+ "reference_from": "dequant_int4",
  "family": "quantization",
- "summary": "group-wise int4 dequantization: w is R x C/2 packed u8 (element 2k in the low nibble, 2k+1 in the high nibble, each a 4-bit two's complement value -8..7); y[r][c] = nibble * s[r][c / 32] with one f32 scale per group of 32 columns",
+ "summary": "CONTROL: workloads/dequant_int4 with the nibble sign extension omitted in every entrant (nibbles read as 0..15 instead of -8..7); every element whose nibble is >= 8 is off by 16 * scale, so the exact check must fail; the R = 1, C = 2 case is left out because both nibbles of its single byte may be < 8",
  "provenance": "authored for OpenAccel Lab (Apache-2.0); the packed signed-nibble, group-32 layout of common 4-bit weight formats",
  "params": {
   "R": 64,
@@ -13,10 +15,6 @@
  },
  "cases": [
   {},
-  {
-   "R": 1,
-   "C": 2
-  },
   {
    "R": 5,
    "C": 70
