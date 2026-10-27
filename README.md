@@ -63,4 +63,4 @@ are welcome as receipts in the same format.
 - [aien-dev/omega-kernel-template](https://github.com/aien-dev/omega-kernel-template) at `23a04c9f`: the single-kernel Omega check on AArch64 and SPIR-V/PoCL. Its PoCL release asset is the lab's arm64 OpenCL runtime.
 - [aien-dev/omega-mv](https://github.com/aien-dev/omega-mv) at `369dbc96`: the Omega compiler used by the Omega entrant.
 
-Pins are in `toolchain.lock`, and outside code is listed in `DEPENDENCIES.md`. License: Apache-2.0.
+Pins are in `toolchain.lock`, and outside code is listed in `DEPENDENCIES.md`. License: Apache-2.0 with the LLVM exception ([LICENSE](LICENSE), [NOTICE](NOTICE)).

@@ -1,0 +1,115 @@
+{
+ "name": "dequant_int4",
+ "family": "quantization",
+ "summary": "group-wise int4 dequantization: w is R x C/2 packed u8 (element 2k in the low nibble, 2k+1 in the high nibble, each a 4-bit two's complement value -8..7); y[r][c] = nibble * s[r][c / 32] with one f32 scale per group of 32 columns",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); the packed signed-nibble, group-32 layout of common 4-bit weight formats",
+ "params": {
+  "R": 64,
+  "C": 256
+ },
+ "derived": {
+  "G": "(C + 31) // 32",
+  "NB": "C // 2"
+ },
+ "cases": [
+  {},
+  {
+   "R": 1,
+   "C": 2
+  },
+  {
+   "R": 5,
+   "C": 70
+  }
+ ],
+ "shrink": {
+  "R": {
+   "min": 1
+  },
+  "C": {
+   "min": 2,
+   "multiple_of": 2
+  }
+ },
+ "inputs": [
+  {
+   "name": "w",
+   "dtype": "u8",
+   "shape": [
+    "R",
+    "NB"
+   ],
+   "gen": {
+    "kind": "int",
+    "lo": 0,
+    "hi": 255
+   }
+  },
+  {
+   "name": "s",
+   "dtype": "f32",
+   "shape": [
+    "R",
+    "G"
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": 0.001,
+    "hi": 0.05
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "y",
+   "dtype": "f32",
+   "shape": [
+    "R",
+    "C"
+   ]
+  }
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "exact",
+   "why": "the nibble is an exact integer -8..7, converts to f32 exactly, then one correctly rounded f32 multiply per element"
+  }
+ },
+ "timing": {
+  "warmup": 2,
+  "repeats": 10
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "dequant_int4",
+     "global": [
+      "R",
+      "C"
+     ],
+     "local": null,
+     "args": [
+      "w",
+      "s",
+      "y",
+      "R",
+      "C",
+      "G",
+      "NB"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}
