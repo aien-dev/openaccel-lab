@@ -9,10 +9,11 @@ host, judges it against the reference, and publishes the board:
 
 **Board: https://aien-dev.github.io/openaccel-lab/**
 
-Wrong kernels are part of the lab. Each control in `controls/` has one defect written into every
-entrant: an off-by-one index, an exclusive scan where an inclusive one belongs, a reduction that
-drops its last element, or a softmax without the max subtraction. The gate fails if any control
-passes on any backend.
+Wrong kernels are part of the lab. Each of the six controls in `controls/` has one defect written
+into every entrant: a GEMM that stops one term short, an exclusive scan where an inclusive one
+belongs, a reduction that drops its last element, a softmax and an attention without the max
+subtraction, and an int4 dequantiser without sign extension. The gate fails if any control passes
+on any backend.
 
 ## What the numbers mean
 

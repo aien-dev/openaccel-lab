@@ -20,6 +20,6 @@ export OAL_CUDA_RUN=1
 export OAL_CUDA_ARCH="${OAL_CUDA_ARCH:-sm_$cc}"
 export OAL_RUNNER_LABEL="${OAL_RUNNER_LABEL:-$name sm_$cc driver $drv}"
 export OAL_TIMING_LABEL="${OAL_TIMING_LABEL:-GPU: launch + cudaDeviceSynchronize, host steady_clock, per repeat}"
-export OAL_EVIDENCE="${OAL_EVIDENCE:-GPU run on $name, driver $drv, $(date -u +%Y-%m-%dT%H:%MZ)}"
+export OAL_EVIDENCE="${OAL_EVIDENCE:-QUALIFIED-on-$name candidate: GPU run, driver $drv, $(date -u +%Y-%m-%dT%H:%MZ)}"
 echo "run_all.sh: $OAL_RUNNER_LABEL arch $OAL_CUDA_ARCH" >&2
 exec python3 "$here/bin/oal-matrix" --backends cuda --controls "$@" > "$out"
