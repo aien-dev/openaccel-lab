@@ -35,6 +35,8 @@ def dist(xs):
 
 recs = []
 for path in a.files:
+    if path.endswith(".shrink.jsonl"):
+        continue
     with open(path) as f:
         recs += [json.loads(l) for l in f if l.strip()]
 gpu_jsonl = sorted(glob.glob(os.path.join(a.receipts, "gpu", "*.jsonl")))
