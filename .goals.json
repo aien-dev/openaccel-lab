@@ -13,13 +13,13 @@
         },
         {
           "id": 2,
-          "description": "25 workloads + 4 controls authored for all entrants",
-          "completed": false
+          "description": "25 workloads + 6 controls authored for all entrants",
+          "completed": true
         },
         {
           "id": 3,
           "description": "CI on ubuntu-24.04-arm and ubuntu-24.04 green with every control flagged",
-          "completed": false
+          "completed": true
         },
         {
           "id": 4,
