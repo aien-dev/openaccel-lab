@@ -1,0 +1,50 @@
+note batched_gemm: fo[(b*M + i)*N + j] = sum_p fa[(b*M + i)*K + p] * fb[(b*K + p)*N + j], f32 in p order
+note one function per output element keeps each function within omc's 16 registers (error 12)
+global dm ulong 4
+fn bgm_el b ulong i ulong j ulong to f32
+n = get dm 2
+k = get dm 3
+ar = mul add mul b get dm 1 i k
+bj = add mul mul b k n j
+s = 0.0f32
+for p ulong k
+x = get fa add ar p
+y = get fb add bj mul p n
+s = add s mul x y
+end
+ret s
+end
+fn kern to void
+m = get dm 1
+n = get dm 2
+for b ulong get dm 0
+for i ulong m
+ro = mul add mul b m i n
+for j ulong n
+v = bgm_el b i j
+put fo add ro j v
+end
+end
+end
+end
+fn main to int
+oal_begin
+put dm 0 ulong oal_p 0
+put dm 1 ulong oal_p 1
+put dm 2 ulong oal_p 2
+put dm 3 ulong oal_p 3
+a = oal_fa 0
+b = oal_fb 1
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 mul mul get dm 0 get dm 1 get dm 2
+oal_end
+ret 0
+end

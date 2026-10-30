@@ -1,0 +1,57 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# oal-gate [--min-backends N] RESULTS.jsonl...
+# Judge oal-matrix output. Prints one line per finding, then a summary line. Exit 0 when:
+#   every control fails (FAIL or RUNTIME_FAIL) wherever it ran, and never passes;
+#   every workload has at least N backends whose every record PASSed;
+#   no workload record ends FAIL, RUNTIME_FAIL, COMPILE_FAIL or TIMEOUT;
+#   the same (workload, params, seed) produced the same case_sha256 on every runner.
+# Exit 1 otherwise, 2 on a usage error.
+# INTERIM host glue (Python). Successor: oal-gate in seeded Omega.
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import argparse
+import collections
+import json
+
+ap = argparse.ArgumentParser(prog="oal-gate")
+ap.add_argument("--min-backends", type=int, default=3)
+ap.add_argument("files", nargs="+")
+a = ap.parse_args()
+recs = []
+for path in a.files:
+    with open(path) as f:
+        recs += [json.loads(l) for l in f if l.strip()]
+bad = 0
+cases = {}
+passing = collections.defaultdict(lambda: collections.defaultdict(list))
+names = set()
+for r in recs:
+    key = (r["workload"], json.dumps(r["params"], sort_keys=True), r["seed"])
+    prev = cases.setdefault(key, (r["case_sha256"], r["machine"]["arch"]))
+    if prev[0] != r["case_sha256"]:
+        print("CASE-MISMATCH %s %s seed %d: %s on %s, %s on %s" % (key[0], key[1], key[2], prev[0][:12], prev[1],
+              r["case_sha256"][:12], r["machine"]["arch"]))
+        bad += 1
+    if r["control"]:
+        if r["status"] == "PASS":
+            print("CONTROL-PASSED %s on %s (%s) seed %d: the wrong kernel was not flagged" % (
+                r["workload"], r["backend"], r["machine"]["arch"], r["seed"]))
+            bad += 1
+        continue
+    names.add(r["workload"])
+    if r["status"] in ("FAIL", "RUNTIME_FAIL", "COMPILE_FAIL", "TIMEOUT"):
+        print("ENTRANT-%s %s on %s (%s) params %s seed %d" % (r["status"], r["workload"], r["backend"],
+              r["machine"]["arch"], key[1], r["seed"]))
+        bad += 1
+    if r["status"] in ("PASS", "FAIL", "RUNTIME_FAIL", "COMPILE_FAIL", "TIMEOUT"):
+        passing[r["workload"]][r["backend"]].append(r["status"] == "PASS")
+for w in sorted(names):
+    ok = sorted(b for b, v in passing[w].items() if v and all(v))
+    if len(ok) < a.min_backends:
+        print("TOO-FEW-BACKENDS %s: %d passing (%s), need %d" % (w, len(ok), ",".join(ok) or "none", a.min_backends))
+        bad += 1
+nctl = len({r["workload"] for r in recs if r["control"]})
+print("oal-gate: %d records, %d workloads, %d controls, %d findings" % (len(recs), len(names), nctl, bad))
+sys.exit(1 if bad else 0)

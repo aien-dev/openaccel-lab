@@ -1,0 +1,38 @@
+note gemv: fo[i] = sum_j fa[i*N + j] * fb[j], f32 accumulation in j order
+note one function per output row keeps each function within omc's 16 registers (error 12)
+global dm ulong 2
+fn gmv_row i ulong to f32
+n = get dm 1
+ar = mul i n
+s = 0.0f32
+for j ulong n
+x = get fa add ar j
+y = get fb j
+s = add s mul x y
+end
+ret s
+end
+fn kern to void
+for i ulong get dm 0
+put fo i gmv_row i
+end
+end
+fn main to int
+oal_begin
+put dm 0 ulong oal_p 0
+put dm 1 ulong oal_p 1
+a = oal_fa 0
+b = oal_fb 1
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 get dm 0
+oal_end
+ret 0
+end

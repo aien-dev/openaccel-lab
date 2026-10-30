@@ -1,0 +1,155 @@
+# OpenAccel Lab: run every workload and control on every entrant that a free GitHub runner can host,
+# judge them against one reference, fail on any entrant failure or any control that passes, and
+# publish the board to GitHub Pages. No GPU is used here; GPU rows enter only as labelled receipts.
+name: OpenAccel Lab
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 5 * * 1"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lab-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  run:
+    name: ${{ matrix.backend }} on ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-24.04-arm, backend: omega }
+          - { os: ubuntu-24.04-arm, backend: opencl }
+          - { os: ubuntu-24.04-arm, backend: triton }
+          - { os: ubuntu-24.04-arm, backend: hip }
+          - { os: ubuntu-24.04, backend: opencl }
+          - { os: ubuntu-24.04, backend: triton }
+          - { os: ubuntu-24.04, backend: hip }
+          - { os: ubuntu-24.04, backend: cuda }
+    env:
+      OAL_RUNNER_LABEL: gh-${{ matrix.os }}
+      TRITON_INTERPRET: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+
+      - name: Install Ubuntu packages
+        run: |
+          sudo apt-get update -qq
+          case "${{ matrix.backend }}@${{ matrix.os }}" in
+            opencl@ubuntu-24.04-arm) pk="clang-18 libllvm18 libllvmspirvlib18.1 ocl-icd-libopencl1 ocl-icd-opencl-dev" ;;
+            opencl@ubuntu-24.04) pk="pocl-opencl-icd ocl-icd-libopencl1 ocl-icd-opencl-dev" ;;
+            hip@*) pk="libtbb-dev g++ perl" ;;
+            cuda@*) pk="nvidia-cuda-toolkit" ;;
+            *) pk="" ;;
+          esac
+          [ -z "$pk" ] || sudo apt-get install -y -qq --no-install-recommends $pk
+
+      - name: Install Python packages
+        run: |
+          python3 -m pip install --user --break-system-packages -q numpy==2.5.4
+          case "${{ matrix.backend }}" in
+            opencl) python3 -m pip install --user --break-system-packages -q pyopencl==2026.1.4 ;;
+            triton) python3 -m pip install --user --break-system-packages -q triton==3.8.0 torch==2.14.1 \
+                      --extra-index-url https://download.pytorch.org/whl/cpu ;;
+          esac
+
+      - name: Fetch pinned toolchain (sha256-checked)
+        run: |
+          case "${{ matrix.backend }}@${{ matrix.os }}" in
+            omega@*) sh tools/fetch.sh omega ;;
+            opencl@ubuntu-24.04-arm) sh tools/fetch.sh pocl; echo "OCL_ICD_VENDORS=$PWD/.oal/icd" >> "$GITHUB_ENV" ;;
+            hip@*) sh tools/fetch.sh hip ;;
+          esac
+
+      - name: Run matrix
+        run: |
+          mkdir -p out
+          python3 bin/oal-matrix --backends ${{ matrix.backend }} --controls --seeds 1,2,3 \
+            > "out/results-${{ matrix.backend }}-${{ matrix.os }}.jsonl"
+          wc -l out/*.jsonl
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: results-${{ matrix.backend }}-${{ matrix.os }}
+          path: out/
+          if-no-files-found: error
+
+  gate:
+    name: gate + board
+    needs: run
+    if: always()
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 60
+    env:
+      TRITON_INTERPRET: "1"
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: results-*
+          path: out
+          merge-multiple: true
+      - name: Install Python packages
+        run: python3 -m pip install --user --break-system-packages -q numpy==2.5.4
+      - name: Fetch Omega compiler (for shrinking Omega failures)
+        run: sh tools/fetch.sh omega
+      - name: Every expected runner reported
+        run: |
+          ls -l out
+          test "$(ls out/results-*.jsonl | wc -l)" -eq 8
+      - name: Minimise Omega failures and record control verdicts
+        run: |
+          mkdir -p site out/shrink
+          python3 - <<'EOF' > out/shrink/todo.txt
+          import json, glob
+          seen = set()
+          for p in glob.glob("out/results-*.jsonl"):
+              for l in open(p):
+                  r = json.loads(l)
+                  if r["backend"] == "omega" and r["status"] == "FAIL" and r["workload"] not in seen:
+                      seen.add(r["workload"])
+                      print(r["workload"], r["seed"], " ".join("--set %s=%s" % kv for kv in r["params"].items()))
+          EOF
+          : > out/results.shrink.jsonl
+          while read -r w s rest; do
+            [ -n "$w" ] || continue
+            python3 bin/oal-shrink omega "$w" --seed "$s" >> out/results.shrink.jsonl || true
+          done < out/shrink/todo.txt
+          wc -l out/results.shrink.jsonl
+      - name: Build board
+        if: always()
+        run: |
+          python3 bin/oal-board out/results-*.jsonl out/results.shrink.jsonl > site/data.json
+          cat out/results-*.jsonl > site/results.jsonl
+      - name: Gate (controls must fail, entrants must pass, >= 3 backends per workload)
+        shell: bash
+        run: python3 bin/oal-gate --min-backends 3 out/results-*.jsonl | tee -a "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-pages-artifact@fc324d3547104276b827a68afc52ff2a11cc49c9 # v5.0.0
+        if: always() && github.ref == 'refs/heads/main'
+        with:
+          path: site/
+
+  pages:
+    name: publish board
+    needs: gate
+    if: always() && github.ref == 'refs/heads/main' && needs.gate.result != 'skipped'
+    runs-on: ubuntu-24.04
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - id: deploy
+        uses: actions/deploy-pages@368f82528645a54fb793d4d04e342629a3f51346 # v5.0.1

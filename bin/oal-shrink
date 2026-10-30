@@ -1,0 +1,77 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# oal-shrink BACKEND WORKLOAD [--seed S] [--set k=v ...]
+# Failure minimisation: starting from a failing case, reduce each parameter toward its manifest
+# "shrink" minimum (respecting multiple_of) while the entrant still fails the same way, then print
+# one JSON line with the original and minimal parameters and the minimal failure. The minimal case
+# reproduces with: oal-gen WORKLOAD --seed S --set k=v ... | oal-run BACKEND WORKLOAD
+# Exit 0 when a minimal failing case was printed, 1 when the starting case does not fail, 2 on usage.
+# INTERIM host glue (Python). Successor: oal-shrink in seeded Omega.
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import argparse
+import json
+from oal import manifest, matrix
+
+ap = argparse.ArgumentParser(prog="oal-shrink")
+ap.add_argument("backend")
+ap.add_argument("workload")
+ap.add_argument("--seed", type=int, default=1)
+ap.add_argument("--set", action="append", default=[], metavar="K=V")
+ap.add_argument("--timeout", type=int, default=300)
+a = ap.parse_args()
+m = manifest.load(a.workload)
+start = dict(m["params"])
+start.update({k: int(v) for k, v in (kv.split("=", 1) for kv in a.set)})
+FAILS = ("FAIL", "RUNTIME_FAIL", "TIMEOUT")
+tries = 0
+
+
+def attempt(p):
+    global tries
+    tries += 1
+    return matrix.run_one(a.backend, m, p, a.seed, a.timeout)
+
+
+first = attempt(start)
+if first["status"] not in FAILS:
+    print(json.dumps({"workload": a.workload, "backend": a.backend, "seed": a.seed, "params": start,
+                      "status": first["status"], "minimised": False}))
+    sys.exit(1)
+cls = first["status"]
+cur, best = dict(start), first
+changed = True
+while changed:
+    changed = False
+    for k, rule in m.get("shrink", {}).items():
+        lo, mult = int(rule.get("min", 1)), int(rule.get("multiple_of", 1))
+        v = cur[k]
+        # smallest first: the minimum, the midpoint, one step down; repeat until nothing smaller fails
+        cands = {lo, (lo + v) // 2, v - mult}
+        for c in sorted(x - x % mult for x in cands):
+            if c < lo or c >= v:
+                continue
+            trial = dict(cur)
+            trial[k] = c
+            try:
+                r = attempt(trial)
+            except (ValueError, ZeroDivisionError):
+                continue
+            if r["status"] == cls:
+                cur, best, changed = trial, r, True
+                break
+out = {"workload": a.workload, "backend": a.backend, "seed": a.seed, "status": cls, "minimised": True,
+       "original_params": start, "params": cur, "tries": tries, "case_sha256": best["case_sha256"],
+       "reproduce": "bin/oal-gen %s --seed %d %s > case.bin && bin/oal-run %s %s < case.bin > out.bin; "
+                    "bin/oal-check %s case.bin out.bin" % (
+           a.workload, a.seed, " ".join("--set %s=%d" % kv for kv in cur.items()), a.backend, a.workload,
+           a.workload)}
+for o in best.get("outputs", []):
+    if not o.get("pass", True):
+        out["first_bad"] = dict(o.get("first_bad", {}), output=o["output"], failed=o.get("failed"),
+                                elements=o.get("elements"))
+        break
+if cls != "FAIL":
+    out["log"] = best.get("log", "")[-600:]
+print(json.dumps(out, sort_keys=True))

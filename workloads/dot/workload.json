@@ -1,0 +1,51 @@
+{
+ "name": "dot",
+ "family": "reduction",
+ "summary": "y[0] = sum a[i]*b[i] over n f32 elements; OpenCL/CUDA reduce in a 256-wide local tree per block, then one block reduces the block partials",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "n": 100003
+ },
+ "derived": {
+  "nb": "(n + 255) // 256"
+ },
+ "cases": [
+  {},
+  {"n": 1},
+  {"n": 257}
+ ],
+ "shrink": {
+  "n": {"min": 1}
+ },
+ "inputs": [
+  {"name": "a", "dtype": "f32", "shape": ["n"], "gen": {"kind": "uniform", "lo": -2.0, "hi": 2.0}},
+  {"name": "b", "dtype": "f32", "shape": ["n"], "gen": {"kind": "normal4", "std": 1.0}}
+ ],
+ "outputs": [
+  {"name": "y", "dtype": "f32", "shape": [1]}
+ ],
+ "scratch": [
+  {"name": "part", "dtype": "f32", "shape": ["nb"]}
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "bound",
+   "rtol": "gamma(n)",
+   "atol": 0,
+   "why": "A dot product of length n in any summation order, with or without fused multiply-add, is within gamma(n)*sum|a_i b_i| of the exact value (Higham ASNA 2nd ed. eq. 3.5 and section 3.1); scale sum|a_i b_i| from reference.py. Padding adds exact zeros. WolframLanguageEvaluator: u=2^-24; g[n_]:=n u/(1-n u); N[g[100003],10] -> 0.005996385607; N[g[257],10] -> 0.00001531862836"
+  }
+ },
+ "timing": {"warmup": 1, "repeats": 5},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {"kernel": "dot_part", "global": ["nb * 256"], "local": [256], "args": ["a", "b", "part", "n", "local:f32:256"]},
+    {"kernel": "dot_fin", "global": [256], "local": [256], "args": ["part", "y", "nb", "local:f32:256"]}
+   ]
+  },
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

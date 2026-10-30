@@ -1,0 +1,126 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# oal-board [--receipts DIR] RESULTS.jsonl... > site/data.json
+# Fold oal-matrix results (and imported GPU receipts) into the dashboard data file. Distributions
+# only: every timing cell is min/p10/p25/median/p75/p90/max with its sample count, never a mean.
+# Exit 0, or 2 on a usage error.
+# INTERIM host glue (Python + numpy). Successor: oal-board in seeded Omega.
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import argparse
+import collections
+import glob
+import json
+import time
+
+import numpy as np
+
+from oal import manifest
+
+ap = argparse.ArgumentParser(prog="oal-board")
+ap.add_argument("--receipts", default=os.path.join(manifest.ROOT, "receipts"))
+ap.add_argument("files", nargs="*")
+a = ap.parse_args()
+
+QS = (0, 10, 25, 50, 75, 90, 100)
+
+
+def dist(xs):
+    if not xs:
+        return None
+    v = np.asarray(xs, dtype=np.float64)
+    return {"n": int(v.size), "q": [float(x) for x in np.percentile(v, QS)]}
+
+
+recs = []
+for path in a.files:
+    if path.endswith(".shrink.jsonl"):
+        continue
+    with open(path) as f:
+        recs += [json.loads(l) for l in f if l.strip()]
+gpu_jsonl = sorted(glob.glob(os.path.join(a.receipts, "gpu", "*.jsonl")))
+for path in gpu_jsonl:
+    with open(path) as f:
+        for l in f:
+            if l.strip():
+                r = json.loads(l)
+                r["_receipt"] = os.path.relpath(path, manifest.ROOT)
+                recs.append(r)
+
+cells = collections.OrderedDict()
+outs_by_case = collections.defaultdict(lambda: collections.defaultdict(set))
+for r in recs:
+    mach = r["machine"]
+    where = r["machine"].get("runner") or mach["arch"]
+    key = (r["workload"], r["backend"], where)
+    c = cells.setdefault(key, {"workload": r["workload"], "backend": r["backend"], "runner": where,
+                               "arch": mach["arch"], "cpu": mach.get("cpu"), "control": r["control"],
+                               "expect": r.get("expect", "pass"), "status": collections.Counter(),
+                               "err": [], "time_default": [], "time_label": r.get("timing_label"),
+                               "evidence": r.get("evidence"), "versions": set(), "toolchain": r.get("toolchain"),
+                               "first_failure": None, "run_url": mach.get("run_url"),
+                               "receipt": r.get("_receipt")})
+    c["status"][r["status"]] += 1
+    if r.get("err_ratio") is not None:
+        c["err"].append(r["err_ratio"])
+    for v in r.get("versions", []):
+        c["versions"].add(v)
+    m = manifest.load(r["workload"])
+    if r["status"] == "PASS" and r["params"] == manifest.params_of(m):
+        c["time_default"] += r.get("times_ns", [])
+    if r["status"] not in ("PASS", "NO_SOURCE", "COMPILED") and c["first_failure"] is None:
+        bad = next((o.get("first_bad") for o in r.get("outputs", []) if not o.get("pass", True)), None)
+        c["first_failure"] = {"status": r["status"], "params": r["params"], "seed": r["seed"],
+                              "first_bad": bad, "log": (r.get("log") or "")[-400:]}
+    if r.get("outputs_sha256"):
+        outs_by_case[(r["workload"], r["case_sha256"])][r["outputs_sha256"]].add(r["backend"])
+
+workloads = {}
+for name in manifest.all_names(include_controls=True):
+    m = manifest.load(name)
+    workloads[name] = {"family": m.get("family"), "summary": m.get("summary"), "control": m["_control"],
+                       "expect": m.get("expect", "pass"), "reference_from": m.get("reference_from"),
+                       "params": manifest.params_of(m), "cases": len(m.get("cases", [{}])),
+                       "tolerance": {k: {kk: vv for kk, vv in v.items()} for k, v in m["tolerance"].items()},
+                       "provenance": m.get("provenance")}
+
+agree = {}
+for (w, _), groups in outs_by_case.items():
+    a_ = agree.setdefault(w, {"cases": 0, "distinct_hist": collections.Counter()})
+    a_["cases"] += 1
+    a_["distinct_hist"][len(groups)] += 1
+
+shrunk = []
+for path in sorted(glob.glob(os.path.join(a.receipts, "shrink", "*.jsonl"))) + [
+        p for p in a.files if p.endswith(".shrink.jsonl")]:
+    with open(path) as f:
+        shrunk += [json.loads(l) for l in f if l.strip()]
+
+imported = []
+for path in sorted(glob.glob(os.path.join(a.receipts, "imported", "*", "*.json"))):
+    rc = json.load(open(path))
+    for res in rc.get("results", []):
+        imported.append({"gpu": rc["machine"].get("gpu"), "cc": rc["machine"].get("cc"),
+                         "driver": rc["machine"].get("driver_version"), "provider": rc.get("provider"),
+                         "kernel": res.get("cubin"), "kind": res.get("kind"), "verdict": res.get("verdict"),
+                         "checked": res.get("checked"), "mismatches": res.get("mismatches"),
+                         "kernel_ms": res.get("kernel_ms"), "receipt": os.path.relpath(path, manifest.ROOT),
+                         "receipt_sha256": rc.get("receipt_sha256"),
+                         "label": "rented GPU, imported receipt from aien-dev/omega-gpu-bench"})
+
+out_cells = []
+for c in cells.values():
+    c = dict(c)
+    c["status"] = dict(c["status"])
+    c["err"] = dist(c["err"])
+    c["time_default"] = dist(c["time_default"])
+    c["versions"] = sorted(c["versions"])
+    out_cells.append(c)
+
+json.dump({"schema": "oal-board/1", "generated": int(time.time()),
+           "lab_commit": next((r.get("lab_commit") for r in recs if r.get("lab_commit")), None),
+           "quantiles": list(QS), "workloads": workloads, "cells": out_cells,
+           "agreement": {w: {"cases": v["cases"], "distinct_hist": dict(v["distinct_hist"])} for w, v in agree.items()},
+           "shrunk": shrunk, "imported_gpu": imported}, sys.stdout, indent=1, sort_keys=True)
+sys.stdout.write("\n")

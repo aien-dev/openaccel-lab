@@ -1,0 +1,50 @@
+{
+ "name": "argmax",
+ "family": "reduction",
+ "summary": "y[0] = index of the first maximum of n f32 elements (grid inputs repeat values, so ties are common); OpenCL/CUDA reduce (value, index) pairs in a 256-wide local tree per block, then one block reduces the block partials",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "n": 100003
+ },
+ "derived": {
+  "nb": "(n + 255) // 256"
+ },
+ "cases": [
+  {},
+  {"n": 1},
+  {"n": 257}
+ ],
+ "shrink": {
+  "n": {"min": 1}
+ },
+ "inputs": [
+  {"name": "x", "dtype": "f32", "shape": ["n"], "gen": {"kind": "grid", "klo": -40, "khi": 40, "shift": 3}}
+ ],
+ "outputs": [
+  {"name": "y", "dtype": "i32", "shape": [1]}
+ ],
+ "scratch": [
+  {"name": "pval", "dtype": "f32", "shape": ["nb"]},
+  {"name": "pidx", "dtype": "i32", "shape": ["nb"]}
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "int",
+   "atol": 0,
+   "why": "integer index, exact: the first index i with x[i] equal to the maximum (numpy argmax). With 81 grid values each occurs about n/81 times, so a kernel that keeps any but the first maximum fails"
+  }
+ },
+ "timing": {"warmup": 1, "repeats": 5},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {"kernel": "amax_part", "global": ["nb * 256"], "local": [256], "args": ["x", "pval", "pidx", "n", "local:f32:256", "local:i32:256"]},
+    {"kernel": "amax_fin", "global": [256], "local": [256], "args": ["pval", "pidx", "y", "nb", "local:f32:256", "local:i32:256"]}
+   ]
+  },
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

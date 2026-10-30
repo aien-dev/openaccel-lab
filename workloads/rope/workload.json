@@ -1,0 +1,136 @@
+{
+ "name": "rope",
+ "family": "elementwise-rotation",
+ "summary": "rotary embedding, half-split pairing: x is T x H x Dh (Dh even), h = Dh/2; for i < h, x1 = x[t,j,i], x2 = x[t,j,i+h], c = cos[t,i], s = sin[t,i]: y[t,j,i] = x1 c - x2 s, y[t,j,i+h] = x1 s + x2 c",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); the rotation is the GPT-NeoX/LLaMA half-split form. The cos and sin tables are inputs generated independently uniform in [-1,1]: the workload checks the rotation arithmetic only, table semantics (theta base 10000, positions 0..T-1) are out of scope because not every entrant has cos/sin.",
+ "params": {
+  "T": 16,
+  "H": 4,
+  "Dh": 64
+ },
+ "derived": {
+  "h": "Dh // 2"
+ },
+ "cases": [
+  {},
+  {
+   "T": 1,
+   "H": 1,
+   "Dh": 2
+  },
+  {
+   "T": 7,
+   "H": 5,
+   "Dh": 34
+  }
+ ],
+ "shrink": {
+  "T": {
+   "min": 1
+  },
+  "H": {
+   "min": 1
+  },
+  "Dh": {
+   "min": 2,
+   "multiple_of": 2
+  }
+ },
+ "inputs": [
+  {
+   "name": "x",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "H",
+    "Dh"
+   ],
+   "gen": {
+    "kind": "normal4",
+    "mean": 0.0,
+    "std": 2.0
+   }
+  },
+  {
+   "name": "cos",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "h"
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": -1.0,
+    "hi": 1.0
+   }
+  },
+  {
+   "name": "sin",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "h"
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": -1.0,
+    "hi": 1.0
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "y",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "H",
+    "Dh"
+   ]
+  }
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "bound",
+   "rtol": "gamma(2)",
+   "atol": 0.0,
+   "why": "each output is a length-2 dot product (x1 c - x2 s or x1 s + x2 c) of exact f32 inputs; with or without fused multiply-add and in either order it is within gamma(2) * (|x1 c| + |x2 s|) (Higham Thm 3.1/3.5), and reference.py passes that sum as the scale (WolframLanguageEvaluator: 2u/(1-2u), u=2^-24 -> 1.192e-7)."
+  }
+ },
+ "timing": {
+  "warmup": 1,
+  "repeats": 5
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "rope",
+     "global": [
+      "T*H*h"
+     ],
+     "local": null,
+     "args": [
+      "x",
+      "cos",
+      "sin",
+      "y",
+      "T*H*h",
+      "h",
+      "H"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}

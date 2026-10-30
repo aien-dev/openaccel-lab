@@ -1,0 +1,48 @@
+{
+ "name": "reduce_max",
+ "family": "reduction",
+ "summary": "y[0] = max of n f32 elements; OpenCL/CUDA reduce in a 256-wide local tree per block, then one block reduces the block partials",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "n": 100003
+ },
+ "derived": {
+  "nb": "(n + 255) // 256"
+ },
+ "cases": [
+  {},
+  {"n": 1},
+  {"n": 257}
+ ],
+ "shrink": {
+  "n": {"min": 1}
+ },
+ "inputs": [
+  {"name": "x", "dtype": "f32", "shape": ["n"], "gen": {"kind": "normal4", "mean": -3.0, "std": 2.0}}
+ ],
+ "outputs": [
+  {"name": "y", "dtype": "f32", "shape": [1]}
+ ],
+ "scratch": [
+  {"name": "part", "dtype": "f32", "shape": ["nb"]}
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "exact",
+   "why": "max does no rounding: the result is one of the inputs, whatever the order"
+  }
+ },
+ "timing": {"warmup": 1, "repeats": 5},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {"kernel": "rmax_part", "global": ["nb * 256"], "local": [256], "args": ["x", "part", "n", "local:f32:256"]},
+    {"kernel": "rmax_fin", "global": [256], "local": [256], "args": ["part", "y", "nb", "local:f32:256"]}
+   ]
+  },
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

@@ -1,0 +1,86 @@
+{
+ "name": "silu",
+ "family": "elementwise-transcendental",
+ "summary": "y[i] = x[i] * sigmoid(x[i]) = x[i] / (1 + exp(-x[i])) over n f32 elements",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "n": 100003
+ },
+ "cases": [
+  {},
+  {
+   "n": 1
+  },
+  {
+   "n": 4097
+  }
+ ],
+ "shrink": {
+  "n": {
+   "min": 1
+  }
+ },
+ "inputs": [
+  {
+   "name": "x",
+   "dtype": "f32",
+   "shape": [
+    "n"
+   ],
+   "gen": {
+    "kind": "uniform",
+    "lo": -16.0,
+    "hi": 16.0
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "y",
+   "dtype": "f32",
+   "shape": [
+    "n"
+   ]
+  }
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "bound",
+   "rtol": "gamma(8)",
+   "atol": 0.0,
+   "why": "y = x / (1 + E), E = exp(-x) computed in f32 (negation exact). exp budget: OpenCL exp <= 3 ulp (OpenCL C 3.0 s7.4), CUDA expf <= 2 ulp; 1 ulp <= 2u relative, so 3 ulp <= 6u (WolframLanguageEvaluator: 3*2^-23/2^-24 -> 6). Since E/(1+E) < 1, the relative error of 1+E is at most that of E, <= 6u <= gamma(6); the add and the divide add one rounding each, so by Higham Lemma 3.3 y = x/(1+e^-x) * (1+theta_8), |theta_8| <= gamma(8) (WolframLanguageEvaluator: 8u/(1-8u), u=2^-24 -> 4.768e-7). Omega computes exp in binary64 and rounds once (<= u + binary64 error). Inputs in [-16,16] keep E and y normal in f32."
+  }
+ },
+ "timing": {
+  "warmup": 1,
+  "repeats": 5
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "silu",
+     "global": [
+      "n"
+     ],
+     "local": null,
+     "args": [
+      "x",
+      "y",
+      "n"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}

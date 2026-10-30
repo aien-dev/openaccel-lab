@@ -1,0 +1,34 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# oal-check WORKLOAD CASE OUTPUTS
+# Compare an entrant's outputs with the float64 reference under the workload's tolerance contract.
+# stdout: one JSON verdict line. Exit 0 PASS, 1 FAIL, 2 usage or malformed input.
+# INTERIM host glue (Python + numpy). Successor: oal-check in seeded Omega.
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import json
+from oal import case, check, manifest, ref
+
+if len(sys.argv) != 4:
+    sys.stderr.write("usage: oal-check WORKLOAD CASE OUTPUTS\n")
+    sys.exit(2)
+m = manifest.load(sys.argv[1])
+blob = open(sys.argv[2], "rb").read()
+raw = open(sys.argv[3], "rb").read()
+pvals, sizes, ins, warm, reps = case.unpack(blob)
+params = dict(zip(manifest.params_of(m).keys(), pvals))
+import numpy as np
+tensors = {}
+for k, s in enumerate(m["inputs"]):
+    tensors[s["name"]] = np.frombuffer(ins[k], dtype=manifest.DTYPES[s["dtype"]][0]).reshape(manifest.shape(s, params))
+try:
+    got = case.split_outputs(m, params, raw)
+except ValueError as e:
+    print(json.dumps({"workload": m["name"], "pass": False, "why": str(e)}))
+    sys.exit(1)
+v = check.compare(m, params, ref.compute(m, params, tensors), got)
+v["workload"] = m["name"]
+v["case_sha256"] = case.sha256(blob)
+print(json.dumps(v))
+sys.exit(0 if v["pass"] else 1)

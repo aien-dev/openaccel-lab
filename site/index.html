@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenAccel Lab: cross-backend kernel conformance board</title>
+<style>
+:root { --bg:#0e1116; --fg:#e6e6e6; --dim:#9aa4b2; --pass:#2e7d4f; --fail:#b3261e; --warn:#a86b00; --na:#3a404a; --line:#2a2f38; }
+body { background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, sans-serif; margin:0; padding:24px; max-width:1400px; }
+h1 { font-size:22px; margin:0 0 4px; } h2 { font-size:17px; margin:28px 0 8px; border-bottom:1px solid var(--line); padding-bottom:4px; }
+p, li { color:var(--dim); max-width:900px; } a { color:#8ab4f8; }
+table { border-collapse:collapse; margin:8px 0; } th, td { border:1px solid var(--line); padding:3px 6px; text-align:left; vertical-align:top; }
+th { background:#161b22; font-weight:600; position:sticky; top:0; }
+td.PASS { background:var(--pass); } td.FAIL, td.RUNTIME_FAIL, td.COMPILE_FAIL, td.TIMEOUT { background:var(--fail); }
+td.COMPILED { background:var(--warn); } td.NOT_RUN, td.NO_SOURCE, td.none { background:var(--na); color:var(--dim); }
+td.flagged { background:var(--pass); } td.missed { background:var(--fail); }
+code { font-size:12px; } .small { font-size:12px; color:var(--dim); } svg text { fill:var(--dim); font-size:11px; }
+</style>
+</head>
+<body>
+<h1>OpenAccel Lab</h1>
+<p>A vendor-neutral, execution-verified conformance and performance lab for accelerator kernels. Every workload has one float64
+reference oracle, a written tolerance contract and the same seeded inputs for every entrant. The entrants are OpenCL C, Triton,
+HIP, CUDA and Omega; none is privileged. Wrong kernels are kept in the lab as controls, and the board shows them being caught.</p>
+<p><b>Read this before reading the numbers.</b> CI timings are host CPU wall-clock times on GitHub runners (OpenCL on PoCL, Triton in
+its interpreter, HIP on HIP-CPU, Omega native AArch64). They show distributions for one runner and are not GPU performance. GPU
+rows appear only from labelled receipts, each linked to its evidence. Timings are shown as min / p10 / p25 / median / p75 / p90 / max
+with the sample count, never as means.</p>
+<p id="meta" class="small"></p>
+
+<h2>Conformance matrix</h2>
+<p>Cell: status over every case and seed (count), and the median share of the tolerance bound used (err ratio; 0 = bit-exact, 1 = at the bound).
+COMPILED means the CUDA source built with nvcc on a runner with no GPU and was not run.</p>
+<div id="matrix"></div>
+
+<h2>Negative controls</h2>
+<p>Each control is a workload with one defect written into every entrant (a dropped term, an exclusive scan, a softmax without max subtraction).
+Green means the lab flagged it on that backend; red means a wrong kernel passed.</p>
+<div id="controls"></div>
+
+<h2>Cross-backend agreement</h2>
+<p>For each workload: how many cases produced 1, 2, 3 or more distinct output byte streams across backends. Bitwise agreement is not
+required, only the tolerance contract; this shows where entrants differ in rounding.</p>
+<div id="agree"></div>
+
+<h2>Timing distributions (default case)</h2>
+<p>Box: p25 to p75, line at median; whiskers p10 to p90; dots min and max. Log scale, nanoseconds.</p>
+<div id="timing"></div>
+
+<h2>Minimised failures</h2>
+<p>For every failing record the CI runs <code>oal-shrink</code>, which reduces the shape while the failure persists and prints the command that reproduces it.</p>
+<div id="shrunk"></div>
+
+<h2>GPU receipts</h2>
+<p>Rows from real GPUs. Each row carries its provenance label; none of them is a CI result.</p>
+<div id="gpu"></div>
+
+<h2>Source</h2>
+<p><a href="https://github.com/aien-dev/openaccel-lab">github.com/aien-dev/openaccel-lab</a> (Apache-2.0 with LLVM exception). Data file: <a href="data.json">data.json</a>.</p>
+
+<script>
+"use strict";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;"}[c]));
+const fmt = ns => ns >= 1e9 ? (ns/1e9).toFixed(2)+" s" : ns >= 1e6 ? (ns/1e6).toFixed(2)+" ms" : ns >= 1e3 ? (ns/1e3).toFixed(1)+" µs" : ns.toFixed(0)+" ns";
+function worst(st) {
+  for (const k of ["FAIL","RUNTIME_FAIL","COMPILE_FAIL","TIMEOUT","PASS","COMPILED","NOT_RUN","NO_SOURCE"]) if (st[k]) return k;
+  return "none";
+}
+function box(d, lo, hi, w) {
+  if (!d) return "";
+  const x = v => 4 + (Math.log10(v) - lo) / (hi - lo) * (w - 8);
+  const q = d.q;
+  return `<svg width="${w}" height="18"><line x1="${x(q[1])}" x2="${x(q[5])}" y1="9" y2="9" stroke="#9aa4b2"/>` +
+    `<rect x="${x(q[2])}" y="3" width="${Math.max(1, x(q[4]) - x(q[2]))}" height="12" fill="#3d6fb6"/>` +
+    `<line x1="${x(q[3])}" x2="${x(q[3])}" y1="2" y2="16" stroke="#fff" stroke-width="2"/>` +
+    `<circle cx="${x(q[0])}" cy="9" r="2" fill="#9aa4b2"/><circle cx="${x(q[6])}" cy="9" r="2" fill="#9aa4b2"/></svg>`;
+}
+fetch("data.json").then(r => r.json()).then(D => {
+  document.getElementById("meta").textContent =
+    `Generated ${new Date(D.generated * 1000).toISOString()} from lab commit ${D.lab_commit || "unknown"}; ${D.cells.length} cells.`;
+  const cols = [...new Set(D.cells.filter(c => !c.receipt).map(c => c.backend + "@" + c.runner))].sort();
+  const byKey = {};
+  for (const c of D.cells) byKey[c.workload + "|" + c.backend + "@" + c.runner] = c;
+  const names = Object.keys(D.workloads).filter(n => !D.workloads[n].control).sort();
+  const ctl = Object.keys(D.workloads).filter(n => D.workloads[n].control).sort();
+  let h = "<table><tr><th>workload</th><th>family</th>" + cols.map(c => `<th>${esc(c)}</th>`).join("") + "</tr>";
+  for (const n of names) {
+    h += `<tr><td title="${esc(D.workloads[n].summary)}">${esc(n)}</td><td>${esc(D.workloads[n].family)}</td>`;
+    for (const col of cols) {
+      const c = byKey[n + "|" + col];
+      if (!c) { h += `<td class="none">-</td>`; continue; }
+      const w = worst(c.status), cnt = Object.entries(c.status).map(([k, v]) => `${k} ${v}`).join(", ");
+      const er = c.err ? ` · err ${c.err.q[3].toPrecision(2)}` : "";
+      const tip = cnt + (c.first_failure ? " | first failure: " + JSON.stringify(c.first_failure) : "") + (c.versions.length ? " | " + c.versions.join("; ") : "");
+      h += `<td class="${w}" title="${esc(tip)}">${esc(w)}${esc(er)}</td>`;
+    }
+    h += "</tr>";
+  }
+  document.getElementById("matrix").innerHTML = h + "</table>";
+
+  h = "<table><tr><th>control</th><th>judged by</th>" + cols.map(c => `<th>${esc(c)}</th>`).join("") + "</tr>";
+  for (const n of ctl) {
+    h += `<tr><td title="${esc(D.workloads[n].summary)}">${esc(n)}</td><td>${esc(D.workloads[n].reference_from)}</td>`;
+    for (const col of cols) {
+      const c = byKey[n + "|" + col];
+      if (!c) { h += `<td class="none">-</td>`; continue; }
+      const st = c.status, ran = (st.PASS || 0) + (st.FAIL || 0) + (st.RUNTIME_FAIL || 0) + (st.TIMEOUT || 0);
+      const cls = !ran ? "none" : st.PASS ? "missed" : "flagged";
+      const label = !ran ? worst(st) : st.PASS ? `MISSED ${st.PASS}/${ran}` : `flagged ${ran}/${ran}`;
+      h += `<td class="${cls}" title="${esc(JSON.stringify(c.first_failure))}">${esc(label)}</td>`;
+    }
+    h += "</tr>";
+  }
+  document.getElementById("controls").innerHTML = h + "</table>";
+
+  h = "<table><tr><th>workload</th><th>cases</th><th>distinct output streams per case (cases)</th></tr>";
+  for (const n of names) {
+    const a = D.agreement[n]; if (!a) continue;
+    h += `<tr><td>${esc(n)}</td><td>${a.cases}</td><td>${Object.entries(a.distinct_hist).sort().map(([k, v]) => `${k}: ${v}`).join(" · ")}</td></tr>`;
+  }
+  document.getElementById("agree").innerHTML = h + "</table>";
+
+  h = "";
+  for (const n of names) {
+    const cs = D.cells.filter(c => c.workload === n && c.time_default);
+    if (!cs.length) continue;
+    const all = cs.flatMap(c => [c.time_default.q[0], c.time_default.q[6]]).filter(v => v > 0);
+    const lo = Math.floor(Math.log10(Math.min(...all))), hi = Math.ceil(Math.log10(Math.max(...all)) + 1e-9);
+    h += `<h3 class="small">${esc(n)} <span class="small">${esc(JSON.stringify(D.workloads[n].params))}</span></h3><table><tr><th>entrant @ runner</th><th>n</th><th>min</th><th>median</th><th>max</th><th>10^${lo} … 10^${hi} ns</th><th>label</th></tr>`;
+    for (const c of cs) {
+      const q = c.time_default.q;
+      h += `<tr><td>${esc(c.backend + "@" + c.runner)}</td><td>${c.time_default.n}</td><td>${fmt(q[0])}</td><td>${fmt(q[3])}</td><td>${fmt(q[6])}</td><td>${box(c.time_default, lo, hi, 320)}</td><td class="small">${esc(c.time_label)}${c.receipt ? " · " + esc(c.receipt) : ""}</td></tr>`;
+    }
+    h += "</table>";
+  }
+  document.getElementById("timing").innerHTML = h;
+
+  h = D.shrunk.length ? "<table><tr><th>workload</th><th>backend</th><th>status</th><th>from</th><th>to</th><th>reproduce</th></tr>" +
+    D.shrunk.map(s => `<tr><td>${esc(s.workload)}</td><td>${esc(s.backend)}</td><td>${esc(s.status)}</td><td>${esc(JSON.stringify(s.original_params))}</td><td>${esc(JSON.stringify(s.params))}</td><td><code>${esc(s.reproduce)}</code></td></tr>`).join("") + "</table>" : "<p>None.</p>";
+  document.getElementById("shrunk").innerHTML = h;
+
+  const gpuCells = D.cells.filter(c => c.receipt);
+  h = "";
+  if (gpuCells.length) {
+    h += "<table><tr><th>workload</th><th>entrant @ machine</th><th>status</th><th>median time</th><th>evidence</th><th>receipt</th></tr>" +
+      gpuCells.map(c => `<tr><td>${esc(c.workload)}</td><td>${esc(c.backend + "@" + c.runner)}</td><td class="${worst(c.status)}">${esc(JSON.stringify(c.status))}</td><td>${c.time_default ? fmt(c.time_default.q[3]) : "-"}</td><td class="small">${esc(c.evidence)} · ${esc(c.time_label)}</td><td><a href="https://github.com/aien-dev/openaccel-lab/blob/main/${esc(c.receipt)}">${esc(c.receipt)}</a></td></tr>`).join("") + "</table>";
+  }
+  if (D.imported_gpu.length) {
+    h += "<table><tr><th>GPU</th><th>cc</th><th>driver</th><th>kernel</th><th>verdict</th><th>checked</th><th>mismatches</th><th>label</th><th>receipt</th></tr>" +
+      D.imported_gpu.map(g => `<tr><td>${esc(g.gpu)}</td><td>${esc(g.cc)}</td><td>${esc(g.driver)}</td><td>${esc(g.kernel)}</td><td>${esc(g.verdict)}</td><td>${esc(g.checked)}</td><td>${esc(g.mismatches)}</td><td class="small">${esc(g.label)}; ${esc(g.provider)}</td><td><a href="https://github.com/aien-dev/openaccel-lab/blob/main/${esc(g.receipt)}">${esc(g.receipt_sha256 ? g.receipt_sha256.slice(0, 12) : g.receipt)}</a></td></tr>`).join("") + "</table>";
+  }
+  document.getElementById("gpu").innerHTML = h || "<p>None yet.</p>";
+}).catch(e => { document.getElementById("meta").textContent = "data.json failed to load: " + e; });
+</script>
+</body>
+</html>

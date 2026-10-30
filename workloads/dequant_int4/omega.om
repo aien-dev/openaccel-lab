@@ -1,0 +1,52 @@
+note dequant_int4: oal_qa gives bytes as -128..127, so add 256 for the u8 value, then take the nibble
+global kr ulong 1
+global kc ulong 1
+global kg ulong 1
+global kb ulong 1
+fn nib4 v long hi ulong to f32
+if lt v 0
+v = add v 256
+end
+n = and v 15
+if eq hi 1
+n = shr v 4
+end
+if ge n 8
+n = sub n 16
+end
+ret f32 n
+end
+fn drow i ulong c ulong g ulong nb ulong to void
+for j ulong c
+v = long get qa add mul i nb div j 2
+sc = get fa add mul i g div j 32
+put fo add mul i c j mul nib4 v rem j 2 sc
+end
+end
+fn kern to void
+r = get kr 0
+for i ulong r
+drow i get kc 0 get kg 0 get kb 0
+end
+end
+fn main to int
+oal_begin
+put kr 0 ulong oal_p 0
+put kc 0 ulong oal_p 1
+put kg 0 ulong oal_p 2
+put kb 0 ulong oal_p 3
+n = oal_qa 0
+a = oal_fa 1
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 mul get kr 0 get kc 0
+oal_end
+ret 0
+end

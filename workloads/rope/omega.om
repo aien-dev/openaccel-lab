@@ -1,0 +1,48 @@
+note rope: half-split rotary rotation over x[T][H][Dh] with cos/sin tables [T][Dh/2]
+global kt ulong 1
+global kh ulong 1
+global khf ulong 1
+fn pair o ulong cb ulong to void
+note rotate the h pairs of one (t, head) row at x offset o with table offset cb
+hf = get khf 0
+for i ulong hf
+x1 = get fa add o i
+x2 = get fa add add o hf i
+c = get fb add cb i
+s = get fc add cb i
+put fo add o i sub mul x1 c mul x2 s
+put fo add add o hf i add mul x1 s mul x2 c
+end
+end
+fn kern to void
+nh = get kh 0
+hf = get khf 0
+for t ulong get kt 0
+cb = mul t hf
+for j ulong nh
+o = mul add mul t nh j mul 2 hf
+pair o cb
+end
+end
+end
+fn main to int
+oal_begin
+put kt 0 ulong oal_p 0
+put kh 0 ulong oal_p 1
+put khf 0 ulong oal_p 3
+a = oal_fa 0
+b = oal_fb 1
+c = oal_fc 2
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 a
+oal_end
+ret 0
+end

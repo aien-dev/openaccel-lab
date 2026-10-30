@@ -1,0 +1,35 @@
+#!/usr/bin/env python3
+# SPDX-License-Identifier: Apache-2.0
+# oal-matrix [--backends B,..] [--workloads W,..] [--controls] [--seeds 1,2,3]
+# Run every (workload, case, seed, backend) and print one oal-result/1 JSON line each (docs/RESULTS.md).
+# Exit 0 when every line was written, whatever the verdicts; judging is oal-gate's job.
+# INTERIM host glue (Python). Successor: oal-matrix in seeded Omega.
+import os
+import sys
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
+import argparse
+import json
+from oal import manifest, matrix, run
+
+ap = argparse.ArgumentParser(prog="oal-matrix")
+ap.add_argument("--backends", default=",".join(run.BACKENDS))
+ap.add_argument("--workloads", default="")
+ap.add_argument("--controls", action="store_true", help="also run controls/")
+ap.add_argument("--only-controls", action="store_true")
+ap.add_argument("--seeds", default="1,2,3")
+ap.add_argument("--timeout", type=int, default=600)
+a = ap.parse_args()
+names = [w for w in a.workloads.split(",") if w] or manifest.all_names(include_controls=a.controls or a.only_controls)
+if a.only_controls:
+    names = [n for n in names if manifest.load(n)["_control"]]
+seeds = [int(s) for s in a.seeds.split(",") if s]
+cache = {}
+for name in names:
+    m = manifest.load(name)
+    for over in matrix.cases_of(m):
+        for seed in seeds:
+            for b in a.backends.split(","):
+                rec = matrix.run_one(b, m, over, seed, a.timeout, cache)
+                sys.stdout.write(json.dumps(rec, sort_keys=True) + "\n")
+                sys.stdout.flush()
+                sys.stderr.write("%-16s %-7s seed %-3d %s %s\n" % (name, b, seed, json.dumps(over), rec["status"]))

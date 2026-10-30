@@ -1,0 +1,28 @@
+{
+ "name": "gemm_nt",
+ "family": "compute-bound",
+ "summary": "C = A B^T with A M x K, B N x K, C M x N, all f32 row-major",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); BLAS SGEMM NT semantics with alpha=1, beta=0",
+ "params": {"M": 48, "N": 40, "K": 72},
+ "cases": [{}, {"M": 17, "N": 13, "K": 19}],
+ "shrink": {"M": {"min": 1}, "N": {"min": 1}, "K": {"min": 1}},
+ "inputs": [
+  {"name": "A", "dtype": "f32", "shape": ["M", "K"], "gen": {"kind": "uniform", "lo": -1.0, "hi": 1.0}},
+  {"name": "B", "dtype": "f32", "shape": ["N", "K"], "gen": {"kind": "normal4", "std": 1.0}}
+ ],
+ "outputs": [{"name": "C", "dtype": "f32", "shape": ["M", "N"]}],
+ "tolerance": {
+  "C": {"kind": "bound", "rtol": "gamma(K)", "atol": 0,
+        "why": "each C[i][j] is a length-K dot product of row i of A and row j of B; in any summation order, fused or not, |err| <= gamma(K)*sum_k |A[i][k] B[j][k]| (Higham Thm 3.1/3.5); reference.py passes that sum as scale. WolframLanguageEvaluator: g[n_]:=n 2^-24/(1-n 2^-24); N[g[72],6] -> 4.29155*10^-6, N[g[19],6] -> 1.13249*10^-6"}
+ },
+ "timing": {"warmup": 1, "repeats": 5},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {"src": "kernel.cl", "launches": [
+   {"kernel": "gemm_nt", "global": ["(N + 15) // 16 * 16", "(M + 15) // 16 * 16"], "local": [16, 16],
+    "args": ["A", "B", "C", "M", "N", "K"]}
+  ]},
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

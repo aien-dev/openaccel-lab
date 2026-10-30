@@ -1,0 +1,41 @@
+note rmsnorm over rows of x[R][D] in f32: y = x rsqrt(mean(x^2) + 1e-6) w
+global kr ulong 1
+global kd ulong 1
+fn rmsrow o ulong d ulong inv f32 to void
+q = 0.0f32
+for k ulong d
+v = get fa add o k
+q = add q mul v v
+end
+rs = div 1.0f32 fsqrt add mul q inv 0.000001f32
+for k ulong d
+p = mul get fa add o k rs
+put fo add o k mul p get fb k
+end
+end
+fn kern to void
+d = get kd 0
+inv = div 1.0f32 f32 d
+for i ulong get kr 0
+rmsrow mul i d d inv
+end
+end
+fn main to int
+oal_begin
+put kr 0 ulong oal_p 0
+put kd 0 ulong oal_p 1
+a = oal_fa 0
+b = oal_fb 1
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 a
+oal_end
+ret 0
+end

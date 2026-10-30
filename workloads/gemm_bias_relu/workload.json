@@ -1,0 +1,29 @@
+{
+ "name": "gemm_bias_relu",
+ "family": "compute-bound",
+ "summary": "C = relu(A B + bias) with A M x K, B K x N, bias N broadcast over rows, all f32 row-major",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); the fused linear+ReLU epilogue of a dense layer",
+ "params": {"M": 48, "N": 40, "K": 72},
+ "cases": [{}, {"M": 17, "N": 13, "K": 19}],
+ "shrink": {"M": {"min": 1}, "N": {"min": 1}, "K": {"min": 1}},
+ "inputs": [
+  {"name": "A", "dtype": "f32", "shape": ["M", "K"], "gen": {"kind": "uniform", "lo": -1.0, "hi": 1.0}},
+  {"name": "B", "dtype": "f32", "shape": ["K", "N"], "gen": {"kind": "normal4", "std": 1.0}},
+  {"name": "bias", "dtype": "f32", "shape": ["N"], "gen": {"kind": "normal4", "std": 2.0}}
+ ],
+ "outputs": [{"name": "C", "dtype": "f32", "shape": ["M", "N"]}],
+ "tolerance": {
+  "C": {"kind": "bound", "rtol": "gamma(K + 1)", "atol": 0,
+        "why": "A[i,:]B[:,j] + bias[j] is a length-(K+1) dot product (the bias times 1), so in any order, fused or not, |err| <= gamma(K+1)*(sum_k |A[i][k] B[k][j]| + |bias[j]|) (Higham Thm 3.1/3.5); relu is 1-Lipschitz and exact, so the bound carries through it. reference.py passes that sum as scale. WolframLanguageEvaluator: g[n_]:=n 2^-24/(1-n 2^-24); N[g[73],6] -> 4.35116*10^-6, N[g[20],6] -> 1.19209*10^-6"}
+ },
+ "timing": {"warmup": 1, "repeats": 5},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {"src": "kernel.cl", "launches": [
+   {"kernel": "gemm_bias_relu", "global": ["(N + 15) // 16 * 16", "(M + 15) // 16 * 16"], "local": [16, 16],
+    "args": ["A", "B", "bias", "C", "M", "N", "K"]}
+  ]},
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

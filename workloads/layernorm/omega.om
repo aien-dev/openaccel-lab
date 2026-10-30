@@ -1,0 +1,55 @@
+note layernorm over rows of x[R][D] in f32: biased variance, eps = 1e-5, y = (x-mu) rsqrt(var+eps) gamma + beta
+global kr ulong 1
+global kd ulong 1
+global kmu f32 1
+fn lnstat o ulong d ulong inv f32 to f32
+note returns rsqrt(var + eps) of the row at o; the row mean goes to kmu
+s = 0.0f32
+for k ulong d
+s = add s get fa add o k
+end
+mu = mul s inv
+put kmu 0 mu
+q = 0.0f32
+for k ulong d
+c = sub get fa add o k mu
+q = add q mul c c
+end
+ret div 1.0f32 fsqrt add mul q inv 0.00001f32
+end
+fn lnout o ulong d ulong mu f32 rs f32 to void
+for k ulong d
+c = sub get fa add o k mu
+p = mul mul c rs get fb k
+put fo add o k add p get fc k
+end
+end
+fn kern to void
+d = get kd 0
+inv = div 1.0f32 f32 d
+for i ulong get kr 0
+o = mul i d
+rs = lnstat o d inv
+lnout o d get kmu 0 rs
+end
+end
+fn main to int
+oal_begin
+put kr 0 ulong oal_p 0
+put kd 0 ulong oal_p 1
+a = oal_fa 0
+b = oal_fb 1
+c = oal_fc 2
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 a
+oal_end
+ret 0
+end

@@ -1,0 +1,45 @@
+note gemm_bias_relu: fo[i*N + j] = max(sum_p fa[i*K + p] * fb[p*N + j] + fc[j], 0), f32 in p order
+note one function per output element keeps each function within omc's 16 registers (error 12)
+global dm ulong 3
+fn gbr_el i ulong j ulong to f32
+n = get dm 1
+k = get dm 2
+ar = mul i k
+s = 0.0f32
+for p ulong k
+x = get fa add ar p
+y = get fb add mul p n j
+s = add s mul x y
+end
+s = add s get fc j
+ret fmax s 0.0f32
+end
+fn kern to void
+n = get dm 1
+for i ulong get dm 0
+for j ulong n
+put fo add mul i n j gbr_el i j
+end
+end
+end
+fn main to int
+oal_begin
+put dm 0 ulong oal_p 0
+put dm 1 ulong oal_p 1
+put dm 2 ulong oal_p 2
+a = oal_fa 0
+b = oal_fb 1
+c = oal_fc 2
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_so 0 mul get dm 0 get dm 1
+oal_end
+ret 0
+end

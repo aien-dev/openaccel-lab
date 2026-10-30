@@ -1,0 +1,27 @@
+{
+ "name": "gemv",
+ "family": "memory-bound",
+ "summary": "y = A x with A M x N row-major, x N, y M, all f32",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); BLAS SGEMV (no transpose) with alpha=1, beta=0",
+ "params": {"M": 200, "N": 300},
+ "cases": [{}, {"M": 33, "N": 17}, {"M": 1, "N": 1}],
+ "shrink": {"M": {"min": 1}, "N": {"min": 1}},
+ "inputs": [
+  {"name": "A", "dtype": "f32", "shape": ["M", "N"], "gen": {"kind": "uniform", "lo": -1.0, "hi": 1.0}},
+  {"name": "x", "dtype": "f32", "shape": ["N"], "gen": {"kind": "normal4", "std": 1.0}}
+ ],
+ "outputs": [{"name": "y", "dtype": "f32", "shape": ["M"]}],
+ "tolerance": {
+  "y": {"kind": "bound", "rtol": "gamma(N)", "atol": 0,
+        "why": "each y[i] is a length-N dot product; in any summation order, fused or not, |err| <= gamma(N)*sum_j |A[i][j] x[j]| (Higham Thm 3.1/3.5); reference.py passes that sum as scale. WolframLanguageEvaluator: g[n_]:=n 2^-24/(1-n 2^-24); N[g[300],6] -> 1.78817*10^-5, N[g[17],6] -> 1.01328*10^-6, N[g[1],6] -> 5.96046*10^-8"}
+ },
+ "timing": {"warmup": 2, "repeats": 10},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {"src": "kernel.cl", "launches": [
+   {"kernel": "gemv", "global": ["(M + 63) // 64 * 64"], "local": [64], "args": ["A", "x", "y", "M", "N"]}
+  ]},
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

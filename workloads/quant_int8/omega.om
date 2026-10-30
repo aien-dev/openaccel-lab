@@ -1,0 +1,68 @@
+note quant_int8: per row s = absmax / 127 (one f32 divide), q = clamp(round_half_even(x / s), -127, 127)
+global kr ulong 1
+global kc ulong 1
+fn rnde y f64 to long
+a = fabs y
+f = long a
+fr = sub a f64 f
+if gt fr 0.5f64
+f = add f 1
+end
+if eq fr 0.5f64
+if eq rem f 2 1
+f = add f 1
+end
+end
+if lt y 0.0f64
+f = neg f
+end
+ret f
+end
+fn qrow r ulong c ulong to void
+b = mul r c
+amax = 0.0f32
+for j ulong c
+amax = fmax amax fabs get fa add b j
+end
+sc = div amax 127.0f32
+put fo r sc
+for j ulong c
+v = long 0
+if gt sc 0.0f32
+v = rnde f64 div get fa add b j sc
+end
+if gt v 127
+v = 127
+end
+if lt v -127
+v = -127
+end
+put qo add b j byte v
+end
+end
+fn kern to void
+r = get kr 0
+c = get kc 0
+for i ulong r
+qrow i c
+end
+end
+fn main to int
+oal_begin
+put kr 0 ulong oal_p 0
+put kc 0 ulong oal_p 1
+a = oal_fa 0
+w = oal_warm
+for i ulong add w oal_reps
+t0 = monons
+kern
+t1 = monons
+if ge i w
+oal_tick sub t1 t0
+end
+end
+oal_sqo 0 mul get kr 0 get kc 0
+oal_so 1 get kr 0
+oal_end
+ret 0
+end

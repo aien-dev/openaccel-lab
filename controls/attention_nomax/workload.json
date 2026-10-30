@@ -1,0 +1,145 @@
+{
+ "name": "attention_nomax",
+ "expect": "fail",
+ "reference_from": "attention",
+ "family": "attention",
+ "summary": "CONTROL: workloads/attention with the row max subtraction omitted in every entrant (e_j = exp(s_j)); Q and K have mean 3.5, so scores near 98 exceed ln(f32 max) = 88.72 and exp overflows, giving NaN rows; the T = 1 case is left out because one score may fall below 88.72",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0)",
+ "params": {
+  "T": 48,
+  "Dh": 64
+ },
+ "cases": [
+  {},
+  {
+   "T": 17
+  }
+ ],
+ "shrink": {
+  "T": {
+   "min": 1
+  },
+  "Dh": {
+   "min": 64,
+   "multiple_of": 64
+  }
+ },
+ "inputs": [
+  {
+   "name": "q",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "Dh"
+   ],
+   "gen": {
+    "kind": "normal4",
+    "mean": 3.5,
+    "std": 1.0
+   }
+  },
+  {
+   "name": "k",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "Dh"
+   ],
+   "gen": {
+    "kind": "normal4",
+    "mean": 3.5,
+    "std": 1.0
+   }
+  },
+  {
+   "name": "v",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "Dh"
+   ],
+   "gen": {
+    "kind": "normal4",
+    "mean": 0.0,
+    "std": 1.0
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "o",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "Dh"
+   ]
+  }
+ ],
+ "scratch": [
+  {
+   "name": "pw",
+   "dtype": "f32",
+   "shape": [
+    "T",
+    "T"
+   ]
+  }
+ ],
+ "tolerance": {
+  "o": {
+   "kind": "bound",
+   "rtol": 1,
+   "atol": 1e-35,
+   "why": "reference.py returns the whole bound as the scale, per element: for row i with n = i+1 terms, bound = sum_j p_j |v_jc| c_j. Algorithm covered: scores, row max, exp(score - max), sum, then either p_j = e_j/sum and O = sum_j p_j v_j or O = (sum_j e_j v_j)/sum, every sum in any order, with or without FMA. Each score is within e_j = gamma(Dh) a_j, a_j = 0.125 sum_c |q_c k_jc| (Higham Thm 3.1; 0.125 exact); the row max within E = max_j e_j; the subtraction adds u|s_j - max|; so exp's argument is within tau_j = e_j + E + u(|d_j| + e_j + E), and with exp budgeted at 3 ulp <= 6u relative (OpenCL C 3.0 s7.4; CUDA expf 2 ulp = 4u is inside it) each exp(score - max) has relative error theta_j = e^tau_j (1 + 6u) - 1. The positive denominator sum has relative error K = sum_j p_j((1+theta_j)(1+gamma(n-1)) - 1); the numerator dot, including the p_j division, is within gamma(n+1) and a final division adds u, giving c_j = (1+theta_j)(1+gamma(n+1))(1+u)/(1-K) - 1. WolframLanguageEvaluator: u=2^-24; g[n_]:=n u/(1-n u); N[g[64],10] -> 3.814711818*10^-6; N[g[49],10] -> 2.920636124*10^-6; N[g[47],10] -> 2.801426152*10^-6; N[3*2^-23/u] -> 6.; N[2*2^-23/u] -> 4.; N[64*2^-24/(1-64*2^-24)*98*2,10] -> 0.0007476835162 (2 gamma(64) a with a near 8*3.5^2 = 98: the order of c_j, so a dropped term or a missing mask fails). atol covers exp, p_j and p_j v_j results flushed or rounded below 2^-126: at most 3 n of them, each < 2^-126 max|v| with max|v| <= Sqrt[12] (normal4 range) and the denominator >= 1: N[3*48*2^-126*Sqrt[12],10] -> 5.863725906*10^-36 <= 1e-35. Without the max subtraction exp overflows: N[Log[2^128],10] -> 88.72283911 is below scores near 98, so O becomes NaN."
+  }
+ },
+ "timing": {
+  "warmup": 1,
+  "repeats": 5
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "attn_p",
+     "global": [
+      "T"
+     ],
+     "local": null,
+     "args": [
+      "q",
+      "k",
+      "pw",
+      "T",
+      "Dh"
+     ]
+    },
+    {
+     "kernel": "attn_o",
+     "global": [
+      "T",
+      "Dh"
+     ],
+     "local": null,
+     "args": [
+      "pw",
+      "v",
+      "o",
+      "T",
+      "Dh"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}

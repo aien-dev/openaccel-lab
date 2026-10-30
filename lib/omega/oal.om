@@ -1,0 +1,339 @@
+note lib/omega/oal.om: OpenAccel Lab case I/O for Omega entrants (seeded Omega, program mode, Linux AArch64).
+note The runner puts this file in front of a workload's kernel.om and compiles the pair with the pinned omc.
+note stdin: one case container (docs/CONTAINER.md). stdout: the output tensors, each padded to 8 bytes.
+note stderr: one line "oal-time-ns N" per timed repeat. Exit 0, or 100 + N on trap N.
+note Arrays cannot be passed by global name (error 19), so each pool has its own load and store word.
+global ib uchar 16777216
+global ob uchar 16777216
+global hdr ulong 8
+global prm long 32
+global tsz ulong 32
+global tof ulong 32
+global fa f32 4194304
+global fb f32 4194304
+global fc f32 4194304
+global fd f32 4194304
+global fe f32 4194304
+global fo f32 4194304
+global fp f32 4194304
+global ia int 4194304
+global ic int 4194304
+global io int 4194304
+global qa byte 4194304
+global qo byte 4194304
+global tline uchar 64
+
+fn oal_u64 o ulong to ulong
+v = ulong 0
+for k ulong 8
+v = or v shl ulong get ib add o k mul k 8
+end
+ret v
+end
+
+fn oal_u32 o ulong to uint
+v = uint 0
+for k ulong 4
+v = or v shl uint get ib add o k uint mul k 8
+end
+ret v
+end
+
+fn oal_pad8 n ulong to ulong
+ret mul div add n 7 8 8
+end
+
+fn oal_begin to void
+n = ulong 0
+while true bound 999999
+r = read 0 ib n sub len ib n
+if lt r 0
+trap 9
+end
+if eq r 0
+break
+end
+n = add n ulong r
+end
+if lt n 48
+trap 9
+end
+if ne oal_u64 0 3550335421018554703
+trap 9
+end
+for k ulong 5
+put hdr k oal_u64 add 8 mul k 8
+end
+np = get hdr 0
+nt = add get hdr 1 get hdr 2
+if gt np 32
+trap 9
+end
+if gt nt 32
+trap 9
+end
+o = ulong 48
+for k ulong np
+put prm k bitcast long oal_u64 o
+o = add o 8
+end
+for k ulong nt
+put tsz k oal_u64 o
+o = add o 8
+end
+for k ulong get hdr 1
+put tof k o
+o = add o oal_pad8 get tsz k
+end
+if gt o n
+trap 9
+end
+end
+
+fn oal_p k ulong to long
+ret get prm k
+end
+
+fn oal_warm to ulong
+ret get hdr 3
+end
+
+fn oal_reps to ulong
+ret get hdr 4
+end
+
+fn oal_lf32 k ulong to ulong
+if ge k get hdr 1
+trap 9
+end
+n = div get tsz k 4
+if gt n 4194304
+trap 9
+end
+ret n
+end
+
+fn oal_fa k ulong to ulong
+n = oal_lf32 k
+o = get tof k
+for i ulong n
+put fa i bitcast f32 oal_u32 add o mul i 4
+end
+ret n
+end
+
+fn oal_fb k ulong to ulong
+n = oal_lf32 k
+o = get tof k
+for i ulong n
+put fb i bitcast f32 oal_u32 add o mul i 4
+end
+ret n
+end
+
+fn oal_fc k ulong to ulong
+n = oal_lf32 k
+o = get tof k
+for i ulong n
+put fc i bitcast f32 oal_u32 add o mul i 4
+end
+ret n
+end
+
+fn oal_fd k ulong to ulong
+n = oal_lf32 k
+o = get tof k
+for i ulong n
+put fd i bitcast f32 oal_u32 add o mul i 4
+end
+ret n
+end
+
+fn oal_fe k ulong to ulong
+n = oal_lf32 k
+o = get tof k
+for i ulong n
+put fe i bitcast f32 oal_u32 add o mul i 4
+end
+ret n
+end
+
+fn oal_ia k ulong to ulong
+n = oal_lf32 k
+o = get tof k
+for i ulong n
+put ia i bitcast int oal_u32 add o mul i 4
+end
+ret n
+end
+
+fn oal_ic k ulong to ulong
+n = oal_lf32 k
+o = get tof k
+for i ulong n
+put ic i bitcast int oal_u32 add o mul i 4
+end
+ret n
+end
+
+fn oal_qa k ulong to ulong
+if ge k get hdr 1
+trap 9
+end
+n = get tsz k
+if gt n 4194304
+trap 9
+end
+o = get tof k
+for i ulong n
+v = long get ib add o i
+if ge v 128
+v = sub v 256
+end
+put qa i byte v
+end
+ret n
+end
+
+fn oal_oof k ulong to ulong
+nin = get hdr 1
+if ge k get hdr 2
+trap 9
+end
+o = ulong 0
+for j ulong k
+o = add o oal_pad8 get tsz add nin j
+end
+ret o
+end
+
+fn oal_o32 o ulong v uint to void
+for k ulong 4
+put ob add o k uchar and shr v uint mul k 8 255
+end
+end
+
+fn oal_ochk k ulong n ulong w ulong to ulong
+if ne mul n w get tsz add get hdr 1 k
+trap 10
+end
+ret oal_oof k
+end
+
+fn oal_so k ulong n ulong to void
+o = oal_ochk k n 4
+for i ulong n
+oal_o32 add o mul i 4 bitcast uint get fo i
+end
+end
+
+fn oal_sp k ulong n ulong to void
+o = oal_ochk k n 4
+for i ulong n
+oal_o32 add o mul i 4 bitcast uint get fp i
+end
+end
+
+fn oal_sio k ulong n ulong to void
+o = oal_ochk k n 4
+for i ulong n
+oal_o32 add o mul i 4 bitcast uint get io i
+end
+end
+
+fn oal_sqo k ulong n ulong to void
+o = oal_ochk k n 1
+for i ulong n
+v = long get qo i
+if lt v 0
+v = add v 256
+end
+put ob add o i uchar v
+end
+end
+
+fn oal_end to void
+nin = get hdr 1
+nout = get hdr 2
+t = ulong 0
+for j ulong nout
+t = add t oal_pad8 get tsz add nin j
+end
+o = ulong 0
+while lt o t bound 999999
+r = write 1 ob o sub t o
+if le r 0
+trap 11
+end
+o = add o ulong r
+end
+end
+
+fn oal_tick ns long to void
+put tline 0 111
+put tline 1 97
+put tline 2 108
+put tline 3 45
+put tline 4 116
+put tline 5 105
+put tline 6 109
+put tline 7 101
+put tline 8 45
+put tline 9 110
+put tline 10 115
+put tline 11 32
+v = ulong ns
+d = new uchar 24 0
+k = ulong 0
+while true bound 30
+put d k uchar add rem v 10 48
+k = add k 1
+v = div v 10
+if eq v 0
+break
+end
+end
+p = ulong 12
+while gt k 0 bound 30
+k = sub k 1
+put tline p get d k
+p = add p 1
+end
+put tline p 10
+r = write 2 tline 0 add p 1
+end
+
+fn oal_expf x f64 to f64
+note e^x in binary64: x = n ln2 + r, |r| <= ln2/2, degree-11 Taylor polynomial in r, scaled by 2^n
+note built from the exponent bits. x < -708 gives 0.0 and x > 709 gives +infinity.
+if lt x -708.0f64
+ret 0.0f64
+end
+if gt x 709.0f64
+ret div 1.0f64 0.0f64
+end
+t = mul x 1.4426950408889634f64
+n = long 0
+if ge t 0.0f64
+n = long add t 0.5f64
+else
+n = long sub t 0.5f64
+end
+fn64 = f64 n
+r = sub x mul fn64 0.6931471803691238f64
+r = sub r mul fn64 1.9082149292705877e-10f64
+p = 2.505210838544172e-8f64
+p = add mul p r 2.755731922398589e-7f64
+p = add mul p r 2.7557319223985893e-6f64
+p = add mul p r 2.48015873015873e-5f64
+p = add mul p r 1.984126984126984e-4f64
+p = add mul p r 1.3888888888888889e-3f64
+p = add mul p r 8.333333333333333e-3f64
+p = add mul p r 4.1666666666666664e-2f64
+p = add mul p r 0.16666666666666666f64
+p = add mul p r 0.5f64
+p = add mul p r 1.0f64
+p = add mul p r 1.0f64
+s = bitcast f64 shl ulong add n 1023 52
+ret mul p s
+end

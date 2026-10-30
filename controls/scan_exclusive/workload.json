@@ -1,0 +1,52 @@
+{
+ "name": "scan_exclusive",
+ "family": "scan",
+ "summary": "CONTROL for scan_i32: every entrant computes the EXCLUSIVE prefix sum (inclusive scan of x shifted right by one); judged by the scan_i32 reference, it must fail",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); deliberately wrong copy of workloads/scan_i32",
+ "expect": "fail",
+ "reference_from": "scan_i32",
+ "params": {
+  "n": 100003
+ },
+ "derived": {
+  "nb": "(n + 255) // 256"
+ },
+ "cases": [
+  {},
+  {"n": 1},
+  {"n": 257}
+ ],
+ "shrink": {
+  "n": {"min": 1}
+ },
+ "inputs": [
+  {"name": "x", "dtype": "i32", "shape": ["n"], "gen": {"kind": "int", "lo": 1, "hi": 9}}
+ ],
+ "outputs": [
+  {"name": "y", "dtype": "i32", "shape": ["n"]}
+ ],
+ "scratch": [
+  {"name": "bsum", "dtype": "i32", "shape": ["nb"]}
+ ],
+ "tolerance": {
+  "y": {
+   "kind": "int",
+   "atol": 0,
+   "why": "same contract as scan_i32; inputs are 1..9 so the exclusive prefix differs from the inclusive one at every element, including n = 1"
+  }
+ },
+ "timing": {"warmup": 1, "repeats": 5},
+ "backends": {
+  "omega": {"src": "omega.om"},
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {"kernel": "scan_blk", "global": ["nb * 256"], "local": [256], "args": ["x", "y", "bsum", "n", "local:i32:256"]},
+    {"kernel": "scan_sums", "global": [256], "local": [256], "args": ["bsum", "nb", "local:i32:256"]},
+    {"kernel": "scan_add", "global": ["nb * 256"], "local": [256], "args": ["y", "bsum", "n"]}
+   ]
+  },
+  "triton": {"src": "triton_kernel.py"},
+  "cuda": {"src": "kernel.cu"}
+ }
+}

@@ -1,0 +1,108 @@
+{
+ "name": "quant_int8",
+ "family": "quantization",
+ "summary": "per-row symmetric int8 quantization of an R x C f32 matrix: s[r] = max_c |x[r][c]| / 127 (f32), q[r][c] = clamp(round_half_even(x[r][c] / s[r]), -127, 127) (i8); a zero row gives s = 0 and q = 0",
+ "provenance": "authored for OpenAccel Lab (Apache-2.0); the per-row absmax scheme of LLM.int8()-style weight quantization",
+ "params": {
+  "R": 32,
+  "C": 256
+ },
+ "cases": [
+  {},
+  {
+   "R": 1,
+   "C": 1
+  },
+  {
+   "R": 5,
+   "C": 77
+  }
+ ],
+ "shrink": {
+  "R": {
+   "min": 1
+  },
+  "C": {
+   "min": 1
+  }
+ },
+ "inputs": [
+  {
+   "name": "x",
+   "dtype": "f32",
+   "shape": [
+    "R",
+    "C"
+   ],
+   "gen": {
+    "kind": "normal4",
+    "mean": 0.0,
+    "std": 1.5
+   }
+  }
+ ],
+ "outputs": [
+  {
+   "name": "q",
+   "dtype": "i8",
+   "shape": [
+    "R",
+    "C"
+   ]
+  },
+  {
+   "name": "s",
+   "dtype": "f32",
+   "shape": [
+    "R"
+   ]
+  }
+ ],
+ "tolerance": {
+  "q": {
+   "kind": "int",
+   "atol": 1,
+   "why": "the reference is round_half_even(127 x / amax) on the exact values (numpy rint in float64). An entrant divides by its own f32 scale s' = (amax/127)(1+e1) and rounds y' = (x/s')(1+e2), |e1|, |e2| <= 5u (2.5 ulp, the OpenCL C single-precision divide limit without -cl-fp32-correctly-rounded-divide-sqrt; 1 ulp <= 2u relative), so |y' - y| <= |y|((1+5u)/(1-5u)^2 - 1) with |y| <= 127: WolframLanguageEvaluator: u=2^-24; N[127*((1+5u)/(1-5u)^2-1),10] -> 0.0001135469047. That is < 1/2, so the two roundings differ by at most 1 (only when y is within 1.2e-4 of a half-integer). A wrong scale (no abs, wrong divisor) or a sign error moves q by far more than 1."
+  },
+  "s": {
+   "kind": "bound",
+   "rtol": "5*u",
+   "atol": 0,
+   "why": "amax is exact (abs and max do not round); s = amax/127 is one division, correctly rounded on IEEE hosts and within 2.5 ulp under OpenCL C (s7.4) and Triton's GPU fdiv. 1 ulp <= 2u relative, so 2.5 ulp <= 5u: WolframLanguageEvaluator: u=2^-24; N[(5/2)*2^-23/u] -> 5.; N[5u,10] -> 2.980232239*10^-7."
+  }
+ },
+ "timing": {
+  "warmup": 2,
+  "repeats": 10
+ },
+ "backends": {
+  "omega": {
+   "src": "omega.om"
+  },
+  "opencl": {
+   "src": "kernel.cl",
+   "launches": [
+    {
+     "kernel": "quant_int8",
+     "global": [
+      "R"
+     ],
+     "local": null,
+     "args": [
+      "x",
+      "q",
+      "s",
+      "R",
+      "C"
+     ]
+    }
+   ]
+  },
+  "triton": {
+   "src": "triton_kernel.py"
+  },
+  "cuda": {
+   "src": "kernel.cu"
+  }
+ }
+}
